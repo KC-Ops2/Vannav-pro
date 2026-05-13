@@ -423,6 +423,46 @@ select option { background: var(--s2); }
 .drive-stat-val.speed-warn { color: var(--red); animation: speedPulse 0.6s ease infinite alternate; }
 @keyframes speedPulse { from { opacity:1; } to { opacity:0.5; } }
 #dStatLimit { font-size:0.52rem; color:var(--muted); margin-top:1px; letter-spacing:0.2px; }
+/* ── HUD Mode ── */
+#hudOverlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #000;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  transform: scaleX(-1);
+  gap: 0;
+}
+#hudOverlay.active { display: flex; }
+.hud-instruction {
+  color: #fff; font-size: 3.2rem; font-weight: 900;
+  text-align: center; line-height: 1.1;
+  padding: 0 20px; letter-spacing: -0.5px;
+  text-shadow: 0 0 30px rgba(255,255,255,0.3);
+}
+.hud-speed-wrap {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-top: 24px;
+}
+.hud-speed {
+  font-size: 6rem; font-weight: 900; color: #f5a623;
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.hud-speed.over { color: #ef5350; }
+.hud-speed-unit { font-size: 1.6rem; color: #aaa; font-weight: 700; }
+.hud-limit {
+  font-size: 1.1rem; color: #888; margin-top: 4px; font-weight: 700;
+}
+.hud-dist {
+  font-size: 1.8rem; color: #fff; margin-top: 20px; font-weight: 800;
+}
+.hud-exit {
+  position: fixed; bottom: 30px; left: 50%; transform: translateX(50%);
+  background: rgba(255,255,255,0.12); color: #fff;
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 30px;
+  padding: 12px 28px; font-size: 1rem; font-weight: 800;
+  cursor: pointer; z-index: 10000;
+}
+
 /* Alert banner */
 #driveAlertBanner {
   position:absolute; top:10px; left:10px; right:10px; z-index:50;
@@ -489,6 +529,7 @@ select option { background: var(--s2); }
   <div class="tap-hint" id="tapHint">Tap map to set point</div>
   <button class="map-btn btn-locate" onclick="locateMe()">📍</button>
   <button class="map-btn btn-style"  onclick="cycleStyle()">🗺</button>
+  <button id="btnTraffic" onclick="toggleTraffic()" class="map-btn" style="bottom:96px;right:12px;font-size:0.7rem;font-weight:800;letter-spacing:-0.3px" title="Live traffic">🚦</button>
 </div>
 
 <div class="sheet">
@@ -509,6 +550,7 @@ select option { background: var(--s2); }
 <div class="statusbar">
   <div class="dot" id="statusDot"></div>
   <span id="statusMsg">Ready — set your vehicle profile to get started</span>
+  <span style="margin-left:auto;font-size:0.55rem;color:var(--muted);opacity:0.6">© 2026 VanNav Pro</span>
 </div>
 
 <!-- Vehicle Modal -->
@@ -1198,6 +1240,62 @@ function getTileUrl() {
   return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 }
 
+// ── HUD WINDSCREEN MODE ──────────────────────────────────────────────────────
+var _hudActive = false;
+
+function toggleHUD() {
+  _hudActive = !_hudActive;
+  var overlay = document.getElementById('hudOverlay');
+  var btn     = document.getElementById('btnHUD');
+  if (_hudActive) {
+    overlay.classList.add('active');
+    if (btn) { btn.style.background = 'var(--amber)'; btn.style.color = '#000'; }
+    // Keep screen awake if possible
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){});
+  } else {
+    overlay.classList.remove('active');
+    if (btn) { btn.style.background = ''; btn.style.color = ''; }
+  }
+}
+
+function updateHUD(speedMph, limInfo, instrText, distText) {
+  if (!_hudActive) return;
+  var sEl = document.getElementById('hudSpeed');
+  var iEl = document.getElementById('hudInstruction');
+  var lEl = document.getElementById('hudLimit');
+  var dEl = document.getElementById('hudDist');
+  if (sEl) {
+    sEl.textContent = Math.round(speedMph);
+    sEl.className   = 'hud-speed' + (limInfo && limInfo.over ? ' over' : '');
+  }
+  if (iEl && instrText) iEl.textContent = instrText.replace(/[↑↗↖➡⬅↪↩▶🏁⚠️✅⟳]/gu, '').trim();
+  if (lEl && limInfo)   lEl.textContent = limInfo.limit + ' limit · ' + limInfo.road;
+  if (dEl)              dEl.textContent = distText || '';
+}
+
+// ── LIVE TRAFFIC OVERLAY ────────────────────────────────────────────────────
+var _trafficLayer   = null;
+var _trafficEnabled = false;
+
+function toggleTraffic() {
+  if (!state.ttKey) { setStatus('TomTom API key needed for traffic', 'warn'); return; }
+  _trafficEnabled = !_trafficEnabled;
+  var btn = document.getElementById('btnTraffic');
+  if (_trafficEnabled) {
+    _trafficLayer = L.tileLayer(
+      'https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=' + state.ttKey,
+      { opacity: 0.7, zIndex: 5, attribution: '© TomTom' }
+    );
+    _trafficLayer.addTo(map);
+    if (btn) { btn.style.background = 'var(--amber)'; btn.style.color = '#000'; }
+    setStatus('Live traffic overlay on', 'live');
+  } else {
+    if (_trafficLayer) { map.removeLayer(_trafficLayer); _trafficLayer = null; }
+    if (btn) { btn.style.background = ''; btn.style.color = ''; }
+    setStatus('Traffic overlay off', 'live');
+  }
+}
+
 function loadTiles() {
   if (tileLayer) map.removeLayer(tileLayer);
   tileErrShown = false;
@@ -1566,8 +1664,15 @@ async function planRoute() {
 
   } catch(e) {
     console.error(e);
-    setStatus('Error: ' + e.message, 'err');
-    alert('Routing error: ' + e.message + '\n\nCheck your TomTom key in Settings and ensure Routing API is enabled.');
+    var msg = e.message || String(e);
+    if (msg.includes('429') || msg.includes('403')) {
+      setStatus('⚠️ TomTom API rate limit reached — wait a moment and try again', 'err');
+    } else if (msg.includes('401')) {
+      setStatus('⚠️ TomTom API key invalid — check Settings', 'err');
+    } else {
+      setStatus('Routing error: ' + msg, 'err');
+      alert('Routing error: ' + msg + '\n\nCheck your TomTom key in Settings and ensure Routing API is enabled.');
+    }
   }
 }
 
@@ -2166,6 +2271,19 @@ var REPORT_TYPES = [
 
 window.communityReports = [];
 var selectedReportType = null;
+
+function cleanupExpiredReports() {
+  var now = Date.now();
+  (window.communityReports || []).forEach(function(r) {
+    var rt = REPORT_TYPES.find(function(t){ return t.key === r.type; });
+    var maxAge = rt ? rt.expire * 60 * 1000 : 2 * 60 * 60 * 1000;
+    if (now - r.ts > maxAge && r.id) {
+      fetch('https://vannav-reports-default-rtdb.europe-west1.firebasedatabase.app/reports/' + r.id + '.json',
+        { method: 'DELETE' }).catch(function(){});
+    }
+  });
+}
+setInterval(cleanupExpiredReports, 5 * 60 * 1000);
 var reportMarkerGroup = L.layerGroup().addTo(map);
 
 function renderReportMarkers() {
@@ -2307,13 +2425,21 @@ function submitReport() {
 
   setStatus('Sending report…', 'warn');
   navigator.geolocation.getCurrentPosition(function(pos) {
+    var validTypes = REPORT_TYPES.map(function(r){ return r.key; });
+    if (validTypes.indexOf(selectedReportType) === -1) {
+      setStatus('❌ Invalid report type', 'err'); return;
+    }
+    var rLat = pos.coords.latitude, rLng = pos.coords.longitude;
+    if (rLat < 49 || rLat > 61 || rLng < -8 || rLng > 2) {
+      setStatus('❌ Location outside UK — report not sent', 'err'); return;
+    }
     var report = {
       type: selectedReportType,
-      lat:  pos.coords.latitude,
-      lng:  pos.coords.longitude,
+      lat:  rLat,
+      lng:  rLng,
       ts:   Date.now(),
       confirms: 0,
-      note: note
+      note: note.slice(0, 100)
     };
     // Use REST API — bypasses SDK auth, clearer errors, no hanging
     var ctrl = new AbortController();
@@ -3292,6 +3418,12 @@ function startNavigation() {
   driveState.use3D   = !!state.ttKey;
   driveState.speedSamples = [];
   _alertDismissed = {};
+  if (state.cameras && state.cameras.length) {
+    try { localStorage.setItem('vn_cached_cameras', JSON.stringify(state.cameras)); } catch(e){}
+  }
+  if (driveState.pts && driveState.pts.length) {
+    try { localStorage.setItem('vn_cached_route', JSON.stringify(driveState.pts)); } catch(e){}
+  }
   _driveAlertDismissed = {};
   // Planned avg speed from TomTom route (fallback for ETA when GPS speed unreliable)
   driveState.routeAvgSpeedMs = (state.route && state.route.duration > 0)
@@ -3299,6 +3431,11 @@ function startNavigation() {
     : 13.4; // default ~30mph if no route data
 
   document.getElementById('driveOverlay').classList.remove('hidden');
+  setTimeout(function(){
+    speak('Navigation started. Head towards destination.', true);
+    var vBtn = document.getElementById('btnVoice');
+    if (vBtn) vBtn.textContent = { off:'🔇', alerts:'⚠️', full:'🔊' }[_voiceMode] || '🔊';
+  }, 1500);
   document.querySelector('.sheet').style.display = 'none';
   document.querySelector('.statusbar').style.display = 'none';
 
@@ -3643,6 +3780,7 @@ function onDrivePosition(pos) {
     driveState.offRoute = true;
     document.getElementById('driveRecalc').classList.add('show');
     document.getElementById('driveInstruction').textContent = '⚠️ Off route — rerouting…';
+    speak('Off route, recalculating', true);
     document.getElementById('dStatSpeed').textContent = Math.round(speedMph);
     var _limOff = getSpeedLimit(speedMph);
     document.getElementById('dStatSpeed').className = 'drive-stat-val' + (_limOff.over ? ' speed-warn' : '');
@@ -3670,6 +3808,21 @@ function onDrivePosition(pos) {
 
   // Check for nearby hazard reports ahead
   checkProximityAlerts(lat, lng);
+
+  // Offline detection
+  if (!navigator.onLine) {
+    var _gpsEl = document.getElementById('driveGpsMsg');
+    if (_gpsEl && !_gpsEl._offlineFlagged) {
+      _gpsEl._offlineFlagged = true;
+      setDriveGps('GPS ±' + Math.round(pos.coords.accuracy||0) + 'm · No signal — cached route', 'warn');
+    }
+    if (!state.cameras || !state.cameras.length) {
+      try { var _cc = localStorage.getItem('vn_cached_cameras'); if (_cc) state.cameras = JSON.parse(_cc); } catch(e){}
+    }
+  } else {
+    var _gpsEl2 = document.getElementById('driveGpsMsg');
+    if (_gpsEl2) _gpsEl2._offlineFlagged = false;
+  }
 
   // Remaining distance (sum of segments from current point onwards)
   var remaining = 0;
@@ -3715,6 +3868,12 @@ function onDrivePosition(pos) {
   document.getElementById('dStatSpeed').className = 'drive-stat-val' + (limInfo.over ? ' speed-warn' : '');
   var limEl = document.getElementById('dStatLimit');
   if (limEl) limEl.textContent = limInfo.limit + ' limit · ' + limInfo.road;
+  // Sync HUD if active
+  var _instrEl = document.getElementById('driveInstruction');
+  var _dDistEl = document.getElementById('dStatDist');
+  updateHUD(speedMph, limInfo,
+    _instrEl ? _instrEl.textContent : '',
+    _dDistEl ? _dDistEl.textContent : '');
   document.getElementById('dStatDist').textContent = fmDist(remaining);
   document.getElementById('dStatEta').textContent = etaStr;
   document.getElementById('dStatTime').textContent = fmTime(Math.max(0, secsRemaining));
@@ -3748,8 +3907,8 @@ function updateInstruction(lat, lng, idx) {
 
   // Arrival check
   var distToEnd = L.latLng(lat, lng).distanceTo(L.latLng(pts[total-1][0], pts[total-1][1]));
-  if (distToEnd < 50) { instrEl.textContent = '🏁 You have arrived!'; return; }
-  if (distToEnd < 200) { instrEl.textContent = '🏁 Destination ahead · ' + fmDist(distToEnd); return; }
+  if (distToEnd < 50) { instrEl.textContent = '🏁 You have arrived!'; speak('You have arrived at your destination', true); return; }
+  if (distToEnd < 200) { instrEl.textContent = '🏁 Destination ahead · ' + fmDist(distToEnd); speak('Destination ahead'); return; }
 
   // Starting
   if (idx < 3) { instrEl.textContent = '▶ Head towards destination'; return; }
@@ -3783,16 +3942,17 @@ function updateInstruction(lat, lng, idx) {
     var absDir = Math.abs(dir);
 
     // Direction word
-    var word;
-    if (absDir > 120)     word = dir > 0 ? '↪ U-turn right' : '↩ U-turn left';
-    else if (absDir > 60) word = dir > 0 ? '➡ Turn right'   : '⬅ Turn left';
-    else                  word = dir > 0 ? '↗ Bear right'   : '↖ Bear left';
+    var word, wordSpoken;
+    if (absDir > 120)     { word = dir > 0 ? '↪ U-turn right' : '↩ U-turn left';  wordSpoken = dir > 0 ? 'Make a U-turn right' : 'Make a U-turn left'; }
+    else if (absDir > 60) { word = dir > 0 ? '➡ Turn right'   : '⬅ Turn left';    wordSpoken = dir > 0 ? 'Turn right' : 'Turn left'; }
+    else                  { word = dir > 0 ? '↗ Bear right'   : '↖ Bear left';    wordSpoken = dir > 0 ? 'Bear right' : 'Bear left'; }
 
     // Urgency prefix
     var prefix;
-    if (d < 80)       prefix = 'NOW — ';
-    else if (d < 150) prefix = 'Soon — ';
-    else              prefix = 'In ' + fmDist(d) + ' — ';
+    if (d < 80)       { prefix = 'NOW — ';              speakTurn(wordSpoken + ' now'); }
+    else if (d < 150) { prefix = 'Soon — ';             speakTurn('Shortly, ' + wordSpoken); }
+    else if (d < 320) { prefix = 'In ' + fmDist(d) + ' — '; speakTurn('In ' + fmDist(d) + ', ' + wordSpoken); }
+    else              { prefix = 'In ' + fmDist(d) + ' — '; }
 
     instrEl.textContent = prefix + word;
   } else {
@@ -3801,6 +3961,64 @@ function updateInstruction(lat, lng, idx) {
     var distNext = L.latLng(lat, lng).distanceTo(L.latLng(pts[nextMajor][0], pts[nextMajor][1]));
     instrEl.textContent = '↑ Continue on route · ' + fmDist(distNext) + ' ahead';
   }
+}
+
+// ── VOICE NAVIGATION ─────────────────────────────────────────────────────────
+// Modes: 'off' | 'alerts' (safety critical only) | 'full' (everything)
+var _voiceMode    = localStorage.getItem('vn_voice_mode') || 'full';
+var _lastSpoken   = {};   // key -> timestamp, track per-phrase repeat
+var _REPEAT_DELAY = 20000; // 20 seconds
+
+// Safety critical report types — always spoken in 'alerts' mode
+var _VOICE_CRITICAL = ['police','mobile_cam','accident','lowbridge','closure','flooding'];
+// Close-only types — only spoken when within 200m in 'alerts' mode
+var _VOICE_CLOSE    = ['breakdown','roadworks','hazard','fog','fuel','animal'];
+
+function speak(text, force) {
+  if (_voiceMode === 'off') return;
+  if (!window.speechSynthesis) return;
+  var now = Date.now();
+  if (!force && _lastSpoken[text] && now - _lastSpoken[text] < _REPEAT_DELAY) return;
+  _lastSpoken[text] = now;
+  window.speechSynthesis.cancel();
+  var utt = new SpeechSynthesisUtterance(text);
+  utt.lang = 'en-GB'; utt.rate = 0.95; utt.pitch = 1.0; utt.volume = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+function speakTurn(text) {
+  // Always speak turns in full mode, never in alerts mode
+  if (_voiceMode !== 'full') return;
+  speak(text);
+}
+
+function speakAlert(type, label, distM) {
+  if (_voiceMode === 'off') return;
+  var isCritical = _VOICE_CRITICAL.indexOf(type) !== -1;
+  var isClose    = _VOICE_CLOSE.indexOf(type) !== -1;
+  if (_voiceMode === 'alerts') {
+    if (isCritical) { speak(label + ' ahead'); return; }
+    if (isClose && distM < 200) { speak(label + ' ahead'); return; }
+    return; // skip non-critical in alerts mode
+  }
+  // Full mode — speak everything
+  speak(label + ' ahead');
+}
+
+function setVoiceMode(mode) {
+  _voiceMode = mode;
+  localStorage.setItem('vn_voice_mode', mode);
+  var labels = { off:'🔇 Voice off', alerts:'⚠️ Alerts only', full:'🔊 Full voice' };
+  var btn = document.getElementById('btnVoice');
+  if (btn) btn.textContent = { off:'🔇', alerts:'⚠️', full:'🔊' }[mode] || '🔊';
+  if (mode !== 'off') speak('Voice set to ' + mode, true);
+  render();
+}
+
+function cycleVoiceMode() {
+  var modes = ['full','alerts','off'];
+  var next  = modes[(modes.indexOf(_voiceMode) + 1) % modes.length];
+  setVoiceMode(next);
 }
 
 // ── UK SPEED LIMITS ─────────────────────────────────────────────────────────
@@ -3841,6 +4059,7 @@ function detectRoadType(speedMph) {
 
 function getSpeedLimit(speedMph) {
   var vType = (state.vehicle && state.vehicle.type) ? state.vehicle.type : 'van';
+  if (!_LIMITS.motorway[vType]) vType = 'van';
   var road  = detectRoadType(speedMph);
   var limit = (_LIMITS[road][vType] || _LIMITS[road].van);
   return { limit: limit, road: _ROAD_LABELS[road], over: speedMph > limit };
@@ -3906,6 +4125,10 @@ function checkProximityAlerts(lat, lng) {
     '</div>' +
     '<div class="ban-dist">' + distStr + '<span>ahead</span></div>';
 
+  // Speak alert based on type and distance
+  if (banner._curId !== best.id) {
+    speakAlert(best.type, rt ? rt.label : 'Hazard', best.dist);
+  }
   if (_alertTimer) clearTimeout(_alertTimer);
   _alertTimer = setTimeout(function() {
     if (banner._curId === best.id) { banner.style.display = 'none'; banner._curId = null; }
@@ -3954,6 +4177,12 @@ var _autoRerouteTimer = null;
 var _isRerouting = false;
 
 function recalcRoute() {
+  if (!navigator.onLine) {
+    setDriveGps('No signal — continuing on cached route', 'warn');
+    document.getElementById('driveRecalc').classList.remove('show');
+    driveState.offRoute = false;
+    return;
+  }
   if (_isRerouting) return;
   _isRerouting = true;
   document.getElementById('driveRecalc').classList.remove('show');
@@ -4025,6 +4254,7 @@ async function autoRerouteFromPos(fromLat, fromLng) {
     }
 
     document.getElementById('driveInstruction').textContent = '✅ Route updated — continue ahead';
+    speak('Route updated, continue ahead');
     setTimeout(function() {
       var el = document.getElementById('driveInstruction');
       if (el && el.textContent.includes('Route updated')) el.textContent = 'Follow the route';
@@ -4209,11 +4439,24 @@ function stopNavigation() {
   if (driveMap)         { driveMap.remove();         driveMap = null; }
   if (driveFallbackMap) { driveFallbackMap.remove();  driveFallbackMap = null; }
   document.getElementById('driveOverlay').classList.add('hidden');
+  if (_hudActive) toggleHUD(); // close HUD on stop
   document.querySelector('.sheet').style.display = '';
   document.querySelector('.statusbar').style.display = '';
   switchTab('route');
 }
 </script>
+<!-- HUD Windscreen Mode -->
+<div id="hudOverlay">
+  <div class="hud-instruction" id="hudInstruction">Head towards destination</div>
+  <div class="hud-speed-wrap">
+    <div class="hud-speed" id="hudSpeed">0</div>
+    <div class="hud-speed-unit">MPH</div>
+  </div>
+  <div class="hud-limit" id="hudLimit">-- limit</div>
+  <div class="hud-dist" id="hudDist"></div>
+  <button class="hud-exit" onclick="toggleHUD()">✕ Exit HUD</button>
+</div>
+
 <!-- Drive Mode Overlay -->
 <div class="drive-overlay hidden" id="driveOverlay">
   <div class="drive-gps-bar">
@@ -4255,6 +4498,8 @@ function stopNavigation() {
       <button class="drive-stop" style="flex:1;min-width:0" onclick="stopNavigation()">■ Stop</button>
       <button onclick="toggle3D()" id="btn3D" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0">3D</button>
       <button onclick="togglePitch()" id="btnPitch" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:1rem;cursor:pointer;padding:0">⛰</button>
+      <button onclick="toggleHUD()" id="btnHUD" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0" title="HUD mode">HUD</button>
+      <button onclick="cycleVoiceMode()" id="btnVoice" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:1rem;cursor:pointer;padding:0" title="Voice mode">🔊</button>
       <button onclick="toggleDriveReport()" id="btnDriveReport" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--amber);font-size:1rem;cursor:pointer;padding:0" title="Report Hazard">🚨</button>
     </div>
     <!-- Quick report panel — hidden by default -->
@@ -4275,8 +4520,8 @@ function stopNavigation() {
 if ('serviceWorker' in navigator) {
   // Inline service worker as blob URL — no separate file needed
   var swCode = `
-    const CACHE = 'vannav-v1';
-    const OFFLINE_URLS = ['/'];
+    const CACHE = 'vannav-v3';
+    const OFFLINE_URLS = ['/', '/Vannav-pro/', '/Vannav-pro/index.html'];
 
     self.addEventListener('install', function(e) {
       e.waitUntil(
