@@ -4466,13 +4466,14 @@ function stopNavigation() {
   <div class="drive-map">
     <div id="driveMap"></div>
     <div id="driveAlertBanner" style="display:none" onclick="dismissDriveAlert()"></div>
+    <button onclick="toggleHUD()" id="btnHUD" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.55);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:10px 8px;font-size:0.65rem;font-weight:800;cursor:pointer;writing-mode:vertical-rl;letter-spacing:1px" title="HUD mode">HUD</button>
   </div>
   <div class="drive-hud">
     <div class="drive-instruction" id="driveInstruction">Calculating position…</div>
     <div class="drive-stats">
       <div class="drive-stat">
         <div class="drive-stat-val" id="dStatSpeed">--</div>
-        <div class="drive-stat-lbl">MPH</div>
+        <div class="drive-stat-lbl" id="dStatSpeedLbl">MPH</div>
         <div id="dStatLimit">-- limit</div>
       </div>
       <div class="drive-stat">
@@ -4498,7 +4499,6 @@ function stopNavigation() {
       <button class="drive-stop" style="flex:1;min-width:0" onclick="stopNavigation()">■ Stop</button>
       <button onclick="toggle3D()" id="btn3D" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0">3D</button>
       <button onclick="togglePitch()" id="btnPitch" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:1rem;cursor:pointer;padding:0">⛰</button>
-      <button onclick="toggleHUD()" id="btnHUD" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0" title="HUD mode">HUD</button>
       <button onclick="cycleVoiceMode()" id="btnVoice" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:1rem;cursor:pointer;padding:0" title="Voice mode">🔊</button>
       <button onclick="toggleDriveReport()" id="btnDriveReport" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--amber);font-size:1rem;cursor:pointer;padding:0" title="Report Hazard">🚨</button>
     </div>
