@@ -3418,6 +3418,7 @@ function startNavigation() {
   driveState.use3D   = !!state.ttKey;
   driveState.speedSamples = [];
   _alertDismissed = {};
+  clearProximityPOI();
   if (state.cameras && state.cameras.length) {
     try { localStorage.setItem('vn_cached_cameras', JSON.stringify(state.cameras)); } catch(e){}
   }
@@ -3434,7 +3435,7 @@ function startNavigation() {
   setTimeout(function(){
     speak('Navigation started. Head towards destination.', true);
     var vBtn = document.getElementById('btnVoice');
-    if (vBtn) vBtn.textContent = { off:'🔇', alerts:'⚠️', full:'🔊' }[_voiceMode] || '🔊';
+    if (vBtn) vBtn.textContent = { off:'🔇', alerts:'⚠️', poi:'📍', full:'🔊' }[_voiceMode] || '🔊';
   }, 1500);
   document.querySelector('.sheet').style.display = 'none';
   document.querySelector('.statusbar').style.display = 'none';
@@ -3808,6 +3809,8 @@ function onDrivePosition(pos) {
 
   // Check for nearby hazard reports ahead
   checkProximityAlerts(lat, lng);
+  // Show nearby POI markers
+  updateProximityPOI(lat, lng);
 
   // Offline detection
   if (!navigator.onLine) {
@@ -4008,15 +4011,16 @@ function speakAlert(type, label, distM) {
 function setVoiceMode(mode) {
   _voiceMode = mode;
   localStorage.setItem('vn_voice_mode', mode);
-  var labels = { off:'🔇 Voice off', alerts:'⚠️ Alerts only', full:'🔊 Full voice' };
+  var labels = { off:'🔇 Voice off', alerts:'⚠️ Alerts only', poi:'📍 POI + Alerts', full:'🔊 Full voice' };
   var btn = document.getElementById('btnVoice');
-  if (btn) btn.textContent = { off:'🔇', alerts:'⚠️', full:'🔊' }[mode] || '🔊';
-  if (mode !== 'off') speak('Voice set to ' + mode, true);
+  if (btn) btn.textContent = { off:'🔇', alerts:'⚠️', poi:'📍', full:'🔊' }[mode] || '🔊';
+  var modeNames = { off:'off', alerts:'alerts only', poi:'P O I and alerts', full:'full' };
+  if (mode !== 'off') speak('Voice set to ' + (modeNames[mode] || mode), true);
   render();
 }
 
 function cycleVoiceMode() {
-  var modes = ['full','alerts','off'];
+  var modes = ['full','poi','alerts','off'];
   var next  = modes[(modes.indexOf(_voiceMode) + 1) % modes.length];
   setVoiceMode(next);
 }
@@ -4063,6 +4067,52 @@ function getSpeedLimit(speedMph) {
   var road  = detectRoadType(speedMph);
   var limit = (_LIMITS[road][vType] || _LIMITS[road].van);
   return { limit: limit, road: _ROAD_LABELS[road], over: speedMph > limit };
+}
+
+// -- PROXIMITY POI MARKERS --------------------------------------------------
+var _poiProximityMarkers = {};
+
+function updateProximityPOI(lat, lng) {
+  if (!driveState || !driveState.active) return;
+  if (!poiState || !poiState.results || !poiState.results.length) return;
+  // Only announce POI if voice mode includes poi or full
+  var canSpeakPOI = (_voiceMode === 'full' || _voiceMode === 'poi');
+  var SHOW_DIST = 150;
+  var colour = poiState.colour || '#f5a623';
+  var emoji  = poiState.emoji  || '!';
+
+  poiState.results.forEach(function(p, i) {
+    var dist = L.latLng(lat, lng).distanceTo(L.latLng(p.lat, p.lng));
+    var key  = 'poi_' + i;
+    if (dist < SHOW_DIST) {
+      if (!_poiProximityMarkers[key]) {
+        var opacity = Math.max(0.4, 1 - (dist / 200));
+        var icon = L.divIcon({
+          html: '<div style="background:' + colour + ';border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;box-shadow:0 2px 10px rgba(0,0,0,0.6);opacity:' + opacity + '">' + emoji + '</div>',
+          className:'', iconAnchor:[14,14]
+        });
+        _poiProximityMarkers[key] = L.marker([p.lat, p.lng], {icon:icon, zIndexOffset:500})
+          .bindPopup('<strong>' + p.name + '</strong><br><small>' + p.addr + '</small><br><small style="color:#aaa">' + Math.round(dist) + 'm away</small>')
+          .addTo(map);
+        if (dist < 80 && canSpeakPOI) {
+          _poiProximityMarkers[key].openPopup();
+          speak(p.name + ' nearby, ' + Math.round(dist) + ' metres');
+        }
+      }
+    } else {
+      if (_poiProximityMarkers[key]) {
+        try { map.removeLayer(_poiProximityMarkers[key]); } catch(e) {}
+        delete _poiProximityMarkers[key];
+      }
+    }
+  });
+}
+
+function clearProximityPOI() {
+  Object.keys(_poiProximityMarkers).forEach(function(k) {
+    try { map.removeLayer(_poiProximityMarkers[k]); } catch(e) {}
+  });
+  _poiProximityMarkers = {};
 }
 
 // ── PROXIMITY ALERT BANNER ───────────────────────────────────────────────────
@@ -4440,6 +4490,7 @@ function stopNavigation() {
   if (driveFallbackMap) { driveFallbackMap.remove();  driveFallbackMap = null; }
   document.getElementById('driveOverlay').classList.add('hidden');
   if (_hudActive) toggleHUD(); // close HUD on stop
+  clearProximityPOI();
   document.querySelector('.sheet').style.display = '';
   document.querySelector('.statusbar').style.display = '';
   switchTab('route');
@@ -4494,7 +4545,7 @@ function stopNavigation() {
       </div>
     </div>
     <button class="drive-recalc" id="driveRecalc" onclick="recalcRoute()">⟳ Recalculate Route</button>
-    <button id="btnReturnPos" onclick="returnToPosition()" style="display:none;position:absolute;top:12px;right:12px;background:var(--amber);color:#000;border:none;border-radius:20px;padding:8px 14px;font-size:0.8rem;font-weight:800;cursor:pointer;align-items:center;gap:6px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.4)">📍 Return to position <span style="font-size:0.7rem;opacity:0.7">(auto in 8s)</span></button>
+    <button id="btnReturnPos" onclick="returnToPosition()" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:var(--amber);color:#000;border:none;border-radius:20px;padding:8px 14px;font-size:0.8rem;font-weight:800;cursor:pointer;align-items:center;gap:6px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.4)">📍 Return to position <span style="font-size:0.7rem;opacity:0.7">(auto in 8s)</span></button>
     <div style="display:flex;gap:6px;margin-bottom:8px;align-items:stretch">
       <button class="drive-stop" style="flex:1;min-width:0" onclick="stopNavigation()">■ Stop</button>
       <button onclick="toggle3D()" id="btn3D" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0">3D</button>
