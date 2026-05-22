@@ -41,7 +41,7 @@ VanNav Pro is a mobile-first navigation web app designed specifically for profes
 - 🚫 17 UK Clean Air Zones
 - ⛰️ 15 notorious steep hills
 - 🚨 Community hazard reports (Firebase real-time database)
-- 🔔 Waze-style proximity alert banner for nearby reports
+- 🔔 Real-time community hazard proximity alerts
 
 ### Stops Along Route
 - ⛽ Fuel stations
