@@ -757,6 +757,7 @@ var state = {
   vehicle: S.get('vn_vehicle') || null,
   saved: S.get('vn_saved') || [],
   fromCoords: null, toCoords: null,
+  waypoints: [],
   fromAddr: '', toAddr: '',
   route: null, alerts: [], bridges: [], cazZones: [],
   clickMode: null, styleIdx: 0,
@@ -1551,6 +1552,30 @@ async function fetchSpeedCameras(routePts) {
 }
 
 
+// -- MULTI-STOP WAYPOINTS ----------------------------------------------------
+function addWaypoint() {
+  state.waypoints = state.waypoints || [];
+  state.waypoints.push({ addr: '', coords: null });
+  render();
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.wp-input');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+function removeWaypoint(idx) {
+  state.waypoints.splice(idx, 1);
+  render();
+}
+
+function moveWaypoint(idx, dir) {
+  var wps = state.waypoints;
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= wps.length) return;
+  var tmp = wps[idx]; wps[idx] = wps[newIdx]; wps[newIdx] = tmp;
+  render();
+}
+
 async function planRoute() {
   if (!state.ttKey) {
     switchTab('settings');
@@ -1591,6 +1616,16 @@ async function planRoute() {
   var fLat = state.fromCoords[0], fLng = state.fromCoords[1];
   var tLat = state.toCoords[0],   tLng = state.toCoords[1];
 
+  // Geocode waypoints
+  state.waypoints = state.waypoints || [];
+  for (var wi = 0; wi < state.waypoints.length; wi++) {
+    var wp = state.waypoints[wi];
+    if (wp.addr && !wp.coords) {
+      try { wp.coords = await geocode(wp.addr); }
+      catch(e) { setStatus('Could not find stop: ' + wp.addr, 'err'); return; }
+    }
+  }
+
   // Build vehicle params string
   var vParams = '';
   if (state.vehicle) {
@@ -1602,7 +1637,11 @@ async function planRoute() {
     vParams += '&vehicleHeight=' + v.height.toFixed(2);
   }
 
-  var base = 'https://api.tomtom.com/routing/1/calculateRoute/' + fLat + ',' + fLng + ':' + tLat + ',' + tLng +
+  var validWPs = (state.waypoints || []).filter(function(wp) { return wp.coords; });
+  var coordStr = fLat + ',' + fLng;
+  validWPs.forEach(function(wp) { coordStr += ':' + wp.coords[0] + ',' + wp.coords[1]; });
+  coordStr += ':' + tLat + ',' + tLng;
+  var base = 'https://api.tomtom.com/routing/1/calculateRoute/' + coordStr +
     '/json?key=' + state.ttKey + '&travelMode=truck&traffic=true&avoid=unpavedRoads' + vParams;
 
   // Request 3 routes: fastest, shortest, and eco
@@ -1629,7 +1668,10 @@ async function planRoute() {
       var key = Math.round(dist / 500); // bucket to 500m — dedupes near-identical routes
       if (seenDists.has(key)) return;
       seenDists.add(key);
-      var pts = data.routes[0].legs[0].points.map(function(p) { return [p.latitude, p.longitude]; });
+      var pts = [];
+      data.routes[0].legs.forEach(function(leg) {
+        leg.points.forEach(function(p) { pts.push([p.latitude, p.longitude]); });
+      });
       routeOptions.push({
         label:    labels[i].label,
         icon:     labels[i].icon,
@@ -1652,6 +1694,14 @@ async function planRoute() {
     map.fitBounds(L.latLngBounds(routeOptions[0].pts), { padding: [50, 50] });
     if (markerA) { map.removeLayer(markerA); placePin('A', state.fromCoords[0], state.fromCoords[1]); }
     if (markerB) { map.removeLayer(markerB); placePin('B', state.toCoords[0], state.toCoords[1]); }
+    (state.waypoints || []).forEach(function(wp, i) {
+      if (!wp.coords) return;
+      var icon = L.divIcon({
+        html: '<div style="background:#9c27b0;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,0.5)">' + (i+1) + '</div>',
+        className:'', iconAnchor:[14,14]
+      });
+      L.marker(wp.coords, {icon:icon}).addTo(routeGroup).bindPopup('Stop ' + (i+1) + ': ' + wp.addr);
+    });
 
     // Inject picker directly — don't rely on switchTab when already on route tab
     state.tab = 'route';
@@ -1906,6 +1956,25 @@ function tabRoute() {
     '<input id="toInput" type="text" placeholder="Destination…" value="' + (state.toAddr||'') + '" autocomplete="off" oninput="acSearch(this,\'to\')"> ' +
     '<div class="autocomplete-list" id="acTo"></div></div>' +
     '<button class="btn sq" style="background:var(--red-dim);border:1px solid var(--red);color:var(--red)" data-action="setclick-to">B</button></div></div>';
+
+  var wps = state.waypoints || [];
+  if (wps.length) {
+    inputsHTML += '<div style="margin:8px 0 4px;font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;color:var(--muted)">Stops</div>';
+    wps.forEach(function(wp, i) {
+      inputsHTML +=
+        '<div class="field" style="margin-bottom:6px"><div class="row" style="gap:6px">' +
+        '<div style="background:#9c27b0;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;flex-shrink:0">' + (i+1) + '</div>' +
+        '<input class="wp-input" type="text" placeholder="Stop ' + (i+1) + ' address..." value="' + (wp.addr||'') + '" autocomplete="off" ' +
+        'oninput="state.waypoints[' + i + '].addr=this.value;state.waypoints[' + i + '].coords=null" ' +
+        'style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--fg);font-size:0.85rem">' +
+        '<button onclick="moveWaypoint(' + i + ',-1)" style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted);cursor:pointer" ' + (i===0?'disabled':'') + '>&#8593;</button>' +
+        '<button onclick="moveWaypoint(' + i + ',1)" style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--muted);cursor:pointer" ' + (i===wps.length-1?'disabled':'') + '>&#8595;</button>' +
+        '<button onclick="removeWaypoint(' + i + ')" style="background:var(--red-dim);border:1px solid var(--red);border-radius:8px;padding:6px 8px;color:var(--red);cursor:pointer">&#10005;</button>' +
+        '</div></div>';
+    });
+    inputsHTML += '<div style="font-size:0.65rem;color:var(--muted);text-align:center;margin-bottom:6px;opacity:0.7">Reorder stops then tap Plan Route to update timings</div>';
+  }
+  inputsHTML += '<button onclick="addWaypoint()" style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:0.8rem;font-weight:700;color:var(--muted);cursor:pointer;margin-bottom:8px">+ Add Stop</button>';
 
   // ── Route option picker ───────────────────────────────────────────────────
   var pickerHTML = '';
@@ -2963,7 +3032,7 @@ function setClick(mode) {
 function clearRoute() {
   state.fromCoords = null; state.toCoords = null;
   state.fromAddr = ''; state.toAddr = '';
-  state.route = null; state.routeOptions = null; state.selectedRouteIdx = 0; state.alerts = []; state.bridges = [];
+  state.route = null; state.routeOptions = null; state.selectedRouteIdx = 0; state.alerts = []; state.bridges = []; state.waypoints = [];
   if (markerA) { map.removeLayer(markerA); markerA = null; }
   if (markerB) { map.removeLayer(markerB); markerB = null; }
   routeGroup.clearLayers();
