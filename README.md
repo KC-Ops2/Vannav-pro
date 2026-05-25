@@ -1,6 +1,6 @@
 # 🚐 VanNav Pro
 
-> Professional navigation for van and HGV drivers — built by a driver, for drivers.
+> Professional navigation for Van and HGV drivers — built by a driver, for drivers.
 
 **Live app:** [kc-ops2.github.io/Vannav-pro](https://kc-ops2.github.io/Vannav-pro)
 
