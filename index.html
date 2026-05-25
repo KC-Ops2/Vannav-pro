@@ -419,8 +419,17 @@ select option { background: var(--s2); }
   font-family: var(--mono); font-size: 1.1rem;
   font-weight: 700; color: var(--amber);
 }
-.drive-stat-val.speed-warn { color: var(--red); animation: speedPulse 0.6s ease infinite alternate; }
-@keyframes speedPulse { from { opacity:1; } to { opacity:0.5; } }
+.drive-stat-val.speed-warn {
+  color: var(--red);
+  font-size: 2.2rem;
+  text-shadow: 0 0 0 3px var(--red);
+  outline: 3px solid var(--red);
+  outline-offset: 4px;
+  border-radius: 50%;
+  padding: 2px 6px;
+  transition: all 0.3s ease;
+}
+.drive-stat-val { transition: all 0.3s ease; }
 #dStatLimit { font-size:0.52rem; color:var(--muted); margin-top:1px; letter-spacing:0.2px; }
 /* ── HUD Mode ── */
 #hudOverlay {
@@ -3881,6 +3890,22 @@ function update2DMap(lat, lng) {
   driveFallbackMap.setView([lat, lng], 17, { animate:true });
 }
 
+// Predictive positioning — extrapolate ahead based on speed + bearing
+function predictPosition(lat, lng, speedMs, bearingDeg, seconds) {
+  if (!speedMs || speedMs < 1) return [lat, lng];
+  var dist = speedMs * seconds;
+  var R    = 6371000;
+  var bearRad = bearingDeg * Math.PI / 180;
+  var latRad  = lat * Math.PI / 180;
+  var newLat  = Math.asin(Math.sin(latRad) * Math.cos(dist/R) +
+                Math.cos(latRad) * Math.sin(dist/R) * Math.cos(bearRad));
+  var newLng  = lng + Math.atan2(
+                Math.sin(bearRad) * Math.sin(dist/R) * Math.cos(latRad),
+                Math.cos(dist/R) - Math.sin(latRad) * Math.sin(newLat)
+              ) * 180 / Math.PI;
+  return [newLat * 180 / Math.PI, newLng];
+}
+
 function onDrivePosition(pos) {
   if (!driveState.active) return;
   var lat = pos.coords.latitude;
@@ -3905,11 +3930,17 @@ function onDrivePosition(pos) {
   var closest = findClosestPoint(lat, lng);
   driveState.traveled = closest.idx;
 
+  // Predict position 0.8s ahead to compensate for GPS lag
+  var speedMs  = pos.coords.speed || 0;
+  var predPos  = predictPosition(lat, lng, speedMs, bearing, 0.8);
+  var predLat  = predPos[0], predLng = predPos[1];
+
   // Snap display position to route when within 30m — fixes GPS road-side drift
-  var dispLat = lat, dispLng = lng;
-  if (closest.dist < 30 && closest.idx < driveState.pts.length) {
-    dispLat = driveState.pts[closest.idx][0];
-    dispLng = driveState.pts[closest.idx][1];
+  var dispLat = predLat, dispLng = predLng;
+  var snapCheck = findClosestPoint(predLat, predLng);
+  if (snapCheck.dist < 30 && snapCheck.idx < driveState.pts.length) {
+    dispLat = driveState.pts[snapCheck.idx][0];
+    dispLng = driveState.pts[snapCheck.idx][1];
   }
 
   // Update map — 3D or 2D using snapped position
@@ -4121,17 +4152,44 @@ function updateInstruction(lat, lng, idx) {
     var dir = bestTurn.diff;
     var absDir = Math.abs(dir);
 
-    // Direction word
+    // Check if TomTom guidance says this is a roundabout
+    var isRoundabout = false;
+    var roundaboutExitNum = 0;
+    for (var rgi = 0; rgi < guidance.length; rgi++) {
+      var rg = guidance[rgi];
+      if (rg.pointIdx >= bestTurn.ptIdx - 3 && rg.pointIdx <= bestTurn.ptIdx + 3) {
+        if (rg.maneuver && rg.maneuver.includes('ROUNDABOUT')) {
+          isRoundabout = true;
+          roundaboutExitNum = rg.roundaboutExit || 0;
+          break;
+        }
+      }
+    }
+
     var word, wordSpoken;
-    if (absDir > 120)     { word = dir > 0 ? '↪ U-turn right' : '↩ U-turn left';  wordSpoken = dir > 0 ? 'Make a U-turn right' : 'Make a U-turn left'; }
-    else if (absDir > 60) { word = dir > 0 ? '➡ Turn right'   : '⬅ Turn left';    wordSpoken = dir > 0 ? 'Turn right' : 'Turn left'; }
-    else                  { word = dir > 0 ? '↗ Bear right'   : '↖ Bear left';    wordSpoken = dir > 0 ? 'Bear right' : 'Bear left'; }
+    if (isRoundabout) {
+      var exitSuffix = roundaboutExitNum ? ' exit ' + roundaboutExitNum : '';
+      var ordinal = ['','1st','2nd','3rd','4th','5th','6th'][roundaboutExitNum] || (roundaboutExitNum + 'th');
+      word      = '🔄 Roundabout' + (roundaboutExitNum ? ' — ' + ordinal + ' exit' : '');
+      wordSpoken = roundaboutExitNum
+        ? 'At the roundabout, take the ' + ordinal + ' exit.'
+        : 'At the roundabout, follow the route.';
+    } else if (absDir > 120) {
+      word = dir > 0 ? '↪ U-turn right' : '↩ U-turn left';
+      wordSpoken = dir > 0 ? 'Make a U-turn right.' : 'Make a U-turn left.';
+    } else if (absDir > 60) {
+      word = dir > 0 ? '➡ Turn right' : '⬅ Turn left';
+      wordSpoken = dir > 0 ? 'Turn right.' : 'Turn left.';
+    } else {
+      word = dir > 0 ? '↗ Bear right' : '↖ Bear left';
+      wordSpoken = dir > 0 ? 'Bear right.' : 'Bear left.';
+    }
 
     // Urgency prefix
     var prefix;
-    if (d < 80)       { prefix = 'NOW — ';              speakTurn(wordSpoken + ' now.'); }
-    else if (d < 150) { prefix = 'Soon — ';             speakTurn('Get ready to ' + wordSpoken.toLowerCase() + ' shortly.'); }
-    else if (d < 320) { prefix = 'In ' + fmDist(d) + ' — '; speakTurn('In ' + fmDist(d) + ', ' + wordSpoken.toLowerCase() + '.'); }
+    if (d < 80)       { prefix = 'NOW — ';                   speakTurn(wordSpoken); }
+    else if (d < 150) { prefix = 'Soon — ';                  speakTurn('Shortly, ' + wordSpoken); }
+    else if (d < 320) { prefix = 'In ' + fmDist(d) + ' — '; speakTurn('In ' + fmDist(d) + ', ' + wordSpoken); }
     else              { prefix = 'In ' + fmDist(d) + ' — '; }
 
     instrEl.textContent = prefix + word;
