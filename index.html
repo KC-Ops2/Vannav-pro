@@ -134,7 +134,6 @@ header {
 }
 .map-btn:active { transform: scale(0.93); }
 .btn-locate { top: 12px; right: 12px; }
-.btn-style  { top: 62px; right: 12px; }
 
 .tap-hint {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
@@ -528,8 +527,7 @@ select option { background: var(--s2); }
   </div>
   <div class="tap-hint" id="tapHint">Tap map to set point</div>
   <button class="map-btn btn-locate" onclick="locateMe()">📍</button>
-  <button class="map-btn btn-style"  onclick="cycleStyle()">🗺</button>
-  <button id="btnTraffic" onclick="toggleTraffic()" class="map-btn" style="bottom:96px;right:12px;font-size:0.7rem;font-weight:800;letter-spacing:-0.3px" title="Live traffic">🚦</button>
+  <button id="btnTraffic" onclick="toggleTraffic()" class="map-btn" style="top:62px;right:12px;font-size:0.9rem" title="Live traffic">🚦</button>
 </div>
 
 <div class="sheet">
