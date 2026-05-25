@@ -1624,6 +1624,30 @@ async function fetchSpeedCameras(routePts) {
 }
 
 
+// -- MULTI-STOP WAYPOINT FUNCTIONS ------------------------------------------
+function addWaypoint() {
+  state.waypoints = state.waypoints || [];
+  state.waypoints.push({ addr: '', coords: null });
+  render();
+  setTimeout(function() {
+    var inputs = document.querySelectorAll('.wp-input');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+function removeWaypoint(idx) {
+  state.waypoints.splice(idx, 1);
+  render();
+}
+
+function moveWaypoint(idx, dir) {
+  var wps = state.waypoints;
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= wps.length) return;
+  var tmp = wps[idx]; wps[idx] = wps[newIdx]; wps[newIdx] = tmp;
+  render();
+}
+
 async function planRoute() {
   if (!state.ttKey) {
     switchTab('settings');
