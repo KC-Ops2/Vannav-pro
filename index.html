@@ -529,7 +529,7 @@ select option { background: var(--s2); }
   <div class="tap-hint" id="tapHint">Tap map to set point</div>
   <button class="map-btn btn-locate" onclick="locateMe()">📍</button>
   <button class="map-btn btn-style"  onclick="cycleStyle()">🗺</button>
-  <button id="btnTraffic" onclick="toggleTraffic()" class="map-btn" style="top:112px;right:12px;font-size:0.9rem" title="Live traffic">🚦</button>
+  <button id="btnTraffic" onclick="toggleTraffic()" class="map-btn" style="bottom:96px;right:12px;font-size:0.7rem;font-weight:800;letter-spacing:-0.3px" title="Live traffic">🚦</button>
 </div>
 
 <div class="sheet">
@@ -757,7 +757,6 @@ var state = {
   vehicle: S.get('vn_vehicle') || null,
   saved: S.get('vn_saved') || [],
   fromCoords: null, toCoords: null,
-  waypoints: [],
   fromAddr: '', toAddr: '',
   route: null, alerts: [], bridges: [], cazZones: [],
   clickMode: null, styleIdx: 0,
@@ -1189,6 +1188,79 @@ var UK_TUNNELS = [
   { id:'T19', name:'Channel Tunnel (Folkestone)',       lat:51.0963, lng: 1.1368, m:null, mw:null, note:'Specialist operator restrictions. Dangerous goods classes 1,6.2,7 prohibited. Book in advance.' },
 ];
 
+// ── EUROPEAN BRIDGES ─────────────────────────────────────────────────────────
+var EU_BRIDGES = [
+  // France
+  { id:'FB01', name:'Pont de Tancarville, Normandy',     lat:49.4790, lng:0.4580, m:3.5, note:'3.5m. Seine crossing — check overhead gantry.' },
+  { id:'FB02', name:'Pont de Brotonne, Seine',           lat:49.5190, lng:0.7240, m:4.0, note:'4.0m height restriction.' },
+  { id:'FB03', name:'Strasbourg Old Town Gate',          lat:48.5734, lng:7.7521, m:2.8, note:'2.8m historic arch — GPS often routes through.' },
+  { id:'FB04', name:'Lyon Vieux Pont, Saône',            lat:45.7600, lng:4.8270, m:3.2, note:'3.2m. Old bridge, narrow.' },
+  { id:'FB05', name:'Bordeaux Pont de Pierre',           lat:44.8404, lng:-0.5672, m:3.0, note:'3.0m. HGVs use Pont d\'Aquitaine.' },
+  // Germany
+  { id:'GB01', name:'Altstadt Bridge, Regensburg',       lat:49.0195, lng:12.0985, m:2.9, note:'2.9m historic bridge — trucks prohibited.' },
+  { id:'GB02', name:'Hamburg Alster Underpass',          lat:53.5530, lng:9.9940,  m:3.8, note:'3.8m underpass — check gantry signs.' },
+  { id:'GB03', name:'Köln Railway Bridge Underpass',     lat:50.9333, lng:6.9600,  m:3.5, note:'3.5m. Frequent HGV incidents.' },
+  { id:'GB04', name:'Dresden Augustus Bridge',           lat:51.0540, lng:13.7370, m:3.3, note:'3.3m historic — trucks use Marienbrücke.' },
+  { id:'GB05', name:'München Isartor Gate',              lat:48.1330, lng:11.5810, m:3.0, note:'3.0m historic gate — avoid with HGV.' },
+  // Netherlands
+  { id:'NB01', name:'Amsterdam Magere Brug',             lat:52.3646, lng:4.9038, m:2.4, note:'2.4m — extremely narrow. Bikes only effectively.' },
+  { id:'NB02', name:'Rotterdam Koningshaven Bridge',     lat:51.9055, lng:4.4840, m:3.2, note:'3.2m. Use Erasmus Bridge for HGVs.' },
+  { id:'NB03', name:'Utrecht Dom Tower Passage',         lat:52.0906, lng:5.1213, m:2.7, note:'2.7m historic passage — avoid with vans.' },
+  // Belgium
+  { id:'BB01', name:'Bruges Bargeplein Bridge',          lat:51.2093, lng:3.2240, m:2.5, note:'2.5m canal bridge — trucks use ring road.' },
+  { id:'BB02', name:'Ghent Graslei Quay Bridge',         lat:51.0543, lng:3.7210, m:3.0, note:'3.0m. Historic area — use N70 for HGVs.' },
+  // Spain
+  { id:'SB01', name:'Toledo Puerta de Bisagra',          lat:39.8628, lng:-4.0280, m:3.2, note:'3.2m historic gate — GPS often routes through.' },
+  { id:'SB02', name:'Seville Puente de Triana',         lat:37.3861, lng:-6.0010, m:3.5, note:'3.5m. Old bridge — use Puente del Alamillo.' },
+  { id:'SB03', name:'Barcelona Port Vell Drawbridge',   lat:41.3764, lng:2.1819,  m:4.0, note:'4.0m. Check opening times.' },
+  // Italy
+  { id:'IB01', name:'Venice Ponte della Libertà',       lat:45.4408, lng:12.3197, m:3.5, note:'3.5m. Only road access to Venice — coaches prohibited.' },
+  { id:'IB02', name:'Florence Ponte Vecchio area',      lat:43.7680, lng:11.2531, m:2.5, note:'2.5m. ZTL zone — HGVs strictly prohibited.' },
+  { id:'IB03', name:'Genoa Polcevera Viaduct',          lat:44.4230, lng:8.8620,  m:4.5, note:'4.5m. New bridge post-2020 — check current restrictions.' },
+  // Ireland
+  { id:'IRB01', name:'Dublin Matt Talbot Bridge',        lat:53.3485, lng:-6.2449, m:4.0, note:'4.0m. Check tide-dependent clearance.' },
+  { id:'IRB02', name:'Cork South Gate Bridge',           lat:51.8969, lng:-8.4730, m:3.2, note:'3.2m. Trucks use N27 bypass.' },
+  // Poland
+  { id:'PB01', name:'Warsaw Śląsko-Dąbrowski Bridge',   lat:52.2489, lng:21.0280, m:4.5, note:'4.5m. Check weight limits — 30t max.' },
+  { id:'PB02', name:'Wrocław Tumski Bridge',             lat:51.1150, lng:17.0440, m:2.8, note:'2.8m pedestrian bridge — no vehicles.' },
+];
+
+// ── EUROPEAN TUNNELS ──────────────────────────────────────────────────────────
+var EU_TUNNELS = [
+  // France
+  { id:'FT01', name:'Mont Blanc Tunnel, France/Italy',  lat:45.8704, lng:6.8625,  m:4.35, mw:null, note:'4.35m height. Dangerous goods strictly controlled — pre-booking required.' },
+  { id:'FT02', name:'Fréjus Road Tunnel, France/Italy', lat:45.1540, lng:6.6720,  m:4.3,  mw:null, note:'4.3m. Alternates with Mont Blanc — check closure schedule.' },
+  { id:'FT03', name:'Tunnel de Fourvière, Lyon (A6/A7)',lat:45.7460, lng:4.8170,  m:4.3,  mw:null, note:'4.3m. Dangerous goods prohibited. Frequent congestion.' },
+  { id:'FT04', name:'Tunnel de Toulon (A57)',           lat:43.1250, lng:5.9300,  m:4.5,  mw:null, note:'4.5m. HGV restrictions at peak hours.' },
+  { id:'FT05', name:'Tunnel de Nanterre, A14 Paris',   lat:48.8990, lng:2.2130,  m:4.5,  mw:null, note:'4.5m. Dangerous goods prohibited.' },
+  // Germany
+  { id:'GT01', name:'Elbtunnel, Hamburg (A7)',          lat:53.5300, lng:9.9200,  m:4.5,  mw:null, note:'4.5m. 3 bores — HGV restricted to outer bores.' },
+  { id:'GT02', name:'Engelberg Tunnel, A81',            lat:48.9580, lng:9.1640,  m:4.5,  mw:null, note:'4.5m. Standard autobahn tunnel.' },
+  { id:'GT03', name:'Rennsteig Tunnel, A71',            lat:50.5960, lng:10.9120, m:4.5,  mw:null, note:'4.5m. Longest German road tunnel — 7.9km.' },
+  // Netherlands
+  { id:'NT01', name:'Coentunnel, Amsterdam (A10)',      lat:52.3930, lng:4.8400,  m:4.5,  mw:null, note:'4.5m. Dangerous goods prohibited.' },
+  { id:'NT02', name:'Heinenoordtunnel, A29',            lat:51.7550, lng:4.5240,  m:4.2,  mw:null, note:'4.2m. HGVs use outside lanes.' },
+  { id:'NT03', name:'Beneluxtunnel, Rotterdam (A15)',   lat:51.8930, lng:4.3290,  m:4.5,  mw:null, note:'4.5m. Dangerous goods follow N15 alternative.' },
+  // Belgium
+  { id:'BT01', name:'Kennedytunnel, Antwerp (R1)',      lat:51.2050, lng:4.3780,  m:4.5,  mw:null, note:'4.5m. Dangerous goods prohibited — use E34 alternative.' },
+  { id:'BT02', name:'Liefkenshoektunnel, Antwerp',      lat:51.2980, lng:4.2800,  m:5.5,  mw:null, note:'5.5m. Toll tunnel — dangerous goods allowed with permit.' },
+  // Spain
+  { id:'ST01', name:'Túnel de Guadarrama, A-6 Madrid',  lat:40.7290, lng:-4.0830, m:4.5,  mw:null, note:'4.5m. 28km — longest Spanish road tunnel.' },
+  { id:'ST02', name:'Túnel de Somport, A-23',           lat:42.7960, lng:-0.5230, m:4.5,  mw:null, note:'4.5m. Spain-France border tunnel.' },
+  { id:'ST03', name:'Túnel de Valdebárzana, A-66',      lat:43.1670, lng:-6.0600, m:4.5,  mw:null, note:'4.5m. Northern Spain — check winter restrictions.' },
+  // Italy
+  { id:'IT01', name:'Gran San Bernardo Tunnel',         lat:45.8690, lng:7.1700,  m:4.0,  mw:null, note:'4.0m. Italy-Switzerland. Seasonal closure possible.' },
+  { id:'IT02', name:'Tunnel del Gran Sasso (A24)',      lat:42.4280, lng:13.5500, m:4.8,  mw:null, note:'4.8m. Dangerous goods prohibited.' },
+  { id:'IT03', name:'Tunnel di Genova, A7',             lat:44.5150, lng:8.9420,  m:4.5,  mw:null, note:'4.5m. Multiple short tunnels — check gantry signs.' },
+  // Poland
+  { id:'PT01', name:'Tunel pod Martwą Wisłą, Gdańsk',  lat:54.3490, lng:18.6760, m:4.7,  mw:null, note:'4.7m. Dangerous goods prohibited.' },
+  // Channel Tunnel already in UK list
+];
+
+// Combined getters used by alerts/route checking
+function getAllBridges() { return UK_BRIDGES.concat(EU_BRIDGES); }
+function getAllTunnels() { return UK_TUNNELS.concat(EU_TUNNELS); }
+
 // ── FORMAT HELPERS ────────────────────────────────────────────────────────────
 function fmDist(m) {
   if (state.units === 'imperial') {
@@ -1552,30 +1624,6 @@ async function fetchSpeedCameras(routePts) {
 }
 
 
-// -- MULTI-STOP WAYPOINTS ----------------------------------------------------
-function addWaypoint() {
-  state.waypoints = state.waypoints || [];
-  state.waypoints.push({ addr: '', coords: null });
-  render();
-  setTimeout(function() {
-    var inputs = document.querySelectorAll('.wp-input');
-    if (inputs.length) inputs[inputs.length - 1].focus();
-  }, 50);
-}
-
-function removeWaypoint(idx) {
-  state.waypoints.splice(idx, 1);
-  render();
-}
-
-function moveWaypoint(idx, dir) {
-  var wps = state.waypoints;
-  var newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= wps.length) return;
-  var tmp = wps[idx]; wps[idx] = wps[newIdx]; wps[newIdx] = tmp;
-  render();
-}
-
 async function planRoute() {
   if (!state.ttKey) {
     switchTab('settings');
@@ -1616,16 +1664,6 @@ async function planRoute() {
   var fLat = state.fromCoords[0], fLng = state.fromCoords[1];
   var tLat = state.toCoords[0],   tLng = state.toCoords[1];
 
-  // Geocode waypoints
-  state.waypoints = state.waypoints || [];
-  for (var wi = 0; wi < state.waypoints.length; wi++) {
-    var wp = state.waypoints[wi];
-    if (wp.addr && !wp.coords) {
-      try { wp.coords = await geocode(wp.addr); }
-      catch(e) { setStatus('Could not find stop: ' + wp.addr, 'err'); return; }
-    }
-  }
-
   // Build vehicle params string
   var vParams = '';
   if (state.vehicle) {
@@ -1637,19 +1675,28 @@ async function planRoute() {
     vParams += '&vehicleHeight=' + v.height.toFixed(2);
   }
 
-  var validWPs = (state.waypoints || []).filter(function(wp) { return wp.coords; });
+  // Detect destination country for routing params
+  var routeCountry = getRouteCountry();
+  _currentCountry  = routeCountry;
+  var avoidParams  = '&avoid=unpavedRoads';
+  // Cross-channel routes — don't avoid ferries
+  var isCrossChannel = (routeCountry !== 'GB' && detectCountry(fLat, fLng) === 'GB') ||
+                       (routeCountry === 'GB' && detectCountry(tLat, tLng) !== 'GB');
+  if (!isCrossChannel) avoidParams += '&avoid=ferries';
+
+  var validWPs = (state.waypoints || []).filter(function(wp){ return wp.coords; });
   var coordStr = fLat + ',' + fLng;
-  validWPs.forEach(function(wp) { coordStr += ':' + wp.coords[0] + ',' + wp.coords[1]; });
+  validWPs.forEach(function(wp){ coordStr += ':' + wp.coords[0] + ',' + wp.coords[1]; });
   coordStr += ':' + tLat + ',' + tLng;
   var base = 'https://api.tomtom.com/routing/1/calculateRoute/' + coordStr +
-    '/json?key=' + state.ttKey + '&travelMode=truck&traffic=true&avoid=unpavedRoads' + vParams;
+    '/json?key=' + state.ttKey + '&travelMode=truck&traffic=true' + avoidParams + vParams;
 
   // Request 3 routes: fastest, shortest, and eco
   try {
     var results = await Promise.all([
-      fetch(base + '&routeType=fastest').then(function(r){return r.json();}),
-      fetch(base + '&routeType=shortest').then(function(r){return r.json();}),
-      fetch(base + '&routeType=eco').then(function(r){return r.json();})
+      fetch(base + '&routeType=fastest&instructionsType=tagged').then(function(r){return r.json();}),
+      fetch(base + '&routeType=shortest&instructionsType=tagged').then(function(r){return r.json();}),
+      fetch(base + '&routeType=eco&instructionsType=tagged').then(function(r){return r.json();})
     ]);
 
     // Build route options — deduplicate if TomTom returns same route twice
@@ -1672,6 +1719,12 @@ async function planRoute() {
       data.routes[0].legs.forEach(function(leg) {
         leg.points.forEach(function(p) { pts.push([p.latitude, p.longitude]); });
       });
+      var guidance = [];
+      if (data.routes[0].guidance && data.routes[0].guidance.instructions) {
+        guidance = data.routes[0].guidance.instructions.map(function(ins) {
+          return { pointIdx: ins.pointIndex||0, maneuver: ins.maneuver||'', roundaboutExit: ins.roundaboutExitNumber||0 };
+        });
+      }
       routeOptions.push({
         label:    labels[i].label,
         icon:     labels[i].icon,
@@ -1679,7 +1732,8 @@ async function planRoute() {
         distance: dist,
         duration: summary.travelTimeInSeconds,
         delay:    summary.trafficDelayInSeconds || 0,
-        pts:      pts
+        pts:      pts,
+        guidance: guidance
       });
     });
 
@@ -1694,14 +1748,6 @@ async function planRoute() {
     map.fitBounds(L.latLngBounds(routeOptions[0].pts), { padding: [50, 50] });
     if (markerA) { map.removeLayer(markerA); placePin('A', state.fromCoords[0], state.fromCoords[1]); }
     if (markerB) { map.removeLayer(markerB); placePin('B', state.toCoords[0], state.toCoords[1]); }
-    (state.waypoints || []).forEach(function(wp, i) {
-      if (!wp.coords) return;
-      var icon = L.divIcon({
-        html: '<div style="background:#9c27b0;color:#fff;border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,0.5)">' + (i+1) + '</div>',
-        className:'', iconAnchor:[14,14]
-      });
-      L.marker(wp.coords, {icon:icon}).addTo(routeGroup).bindPopup('Stop ' + (i+1) + ': ' + wp.addr);
-    });
 
     // Inject picker directly — don't rely on switchTab when already on route tab
     state.tab = 'route';
@@ -1710,7 +1756,10 @@ async function planRoute() {
     if (tEl) tEl.classList.add('active');
     var sheetBody = document.getElementById('sheetBody');
     if (sheetBody) { sheetBody.innerHTML = tabRoute(); sheetBody.scrollTop = 0; }
-    setStatus('Choose a route below', 'live');
+    var _rc = getRouteCountry();
+    var _rcName = (_COUNTRY_BOUNDS.find(function(b){ return b.code === _rc; }) || {}).name || '';
+    var _flags = {GB:'🇬🇧',FR:'🇫🇷',DE:'🇩🇪',NL:'🇳🇱',BE:'🇧🇪',ES:'🇪🇸',IE:'🇮🇪',IT:'🇮🇹',PL:'🇵🇱'};
+    setStatus((_flags[_rc]||'🌍') + ' ' + (_rcName ? _rcName + ' — ' : '') + 'Choose a route below', 'live');
 
   } catch(e) {
     console.error(e);
@@ -1888,7 +1937,7 @@ function loadBridges(routePts) {
   var vH = state.vehicle ? state.vehicle.height : 4.0;
 
   // Load bridges
-  UK_BRIDGES.forEach(function(b) {
+  getAllBridges().forEach(function(b) {
     var near = routePts.some(function(p) {
       return L.latLng(b.lat, b.lng).distanceTo(L.latLng(p[0], p[1])) < 50000;
     });
@@ -1907,7 +1956,7 @@ function loadBridges(routePts) {
   });
 
   // Load tunnels
-  UK_TUNNELS.forEach(function(t) {
+  getAllTunnels().forEach(function(t) {
     var near = routePts.some(function(p) {
       return L.latLng(t.lat, t.lng).distanceTo(L.latLng(p[0], p[1])) < 50000;
     });
@@ -2128,7 +2177,7 @@ function tabBridgesContent() {
   var hasTunnels = state.bridges.some(function(b) { return b.kind === 'tunnel'; });
 
   var bridgeList = (hasBridges ? state.bridges.filter(function(b){ return b.kind==='bridge'; }) : UK_BRIDGES.slice(0,10));
-  var tunnelList = (hasTunnels ? state.bridges.filter(function(b){ return b.kind==='tunnel'; }) : UK_TUNNELS.slice(0,8));
+  var tunnelList = (hasTunnels ? state.bridges.filter(function(b){ return b.kind==='tunnel'; }) : getAllTunnels().slice(0,8));
 
   var hasRoute = state.bridges.length > 0;
   var routeNote = hasRoute ? 'Near your current route' : 'Sample — plan a route to see route-specific hazards';
@@ -2301,6 +2350,11 @@ function tabSettings() {
     '<div class="unit-opt ' + (state.units === 'imperial' ? 'on' : '') + '" onclick="setUnits(\'imperial\')">Imperial (mi / ft)</div>' +
     '<div class="unit-opt ' + (state.units === 'metric'   ? 'on' : '') + '" onclick="setUnits(\'metric\')">Metric (km / m)</div>' +
     '</div></div>' +
+    '<div class="divider"></div>' +
+    '<div class="field"><label class="lbl">Navigation Voice</label>' +
+    '<div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px">Choose your preferred voice</div>' +
+    renderVoiceSelector() +
+    '</div>' +
     '<div class="divider"></div>' +
     '<div class="field"><label class="lbl">Language</label>' +
     '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">' +
@@ -2508,7 +2562,7 @@ function submitReport() {
       lng:  rLng,
       ts:   Date.now(),
       confirms: 0,
-      note: note.slice(0, 100)
+      note: sanitizeText(note.slice(0, 100))
     };
     // Use REST API — bypasses SDK auth, clearer errors, no hanging
     var ctrl = new AbortController();
@@ -3480,7 +3534,8 @@ function startNavigation() {
   }
 
   driveState.active  = true;
-  driveState.pts     = state.route.pts;
+  driveState.pts      = state.route.pts;
+  driveState.guidance = state.route.guidance || [];
   driveState.traveled = 0;
   driveState.offRoute = false;
   driveState.lastBearing = 0;
@@ -3502,9 +3557,9 @@ function startNavigation() {
 
   document.getElementById('driveOverlay').classList.remove('hidden');
   setTimeout(function(){
-    speak('Navigation started. Head towards destination.', true);
+    speak('Navigation started. Head towards your destination.', true);
     var vBtn = document.getElementById('btnVoice');
-    if (vBtn) vBtn.textContent = { off:'🔇', alerts:'⚠️', poi:'📍', full:'🔊' }[_voiceMode] || '🔊';
+    if (vBtn) vBtn.textContent = { off:'🔇', alerts:'⚠️', full:'🔊' }[_voiceMode] || '🔊';
   }, 1500);
   document.querySelector('.sheet').style.display = 'none';
   document.querySelector('.statusbar').style.display = 'none';
@@ -3850,7 +3905,7 @@ function onDrivePosition(pos) {
     driveState.offRoute = true;
     document.getElementById('driveRecalc').classList.add('show');
     document.getElementById('driveInstruction').textContent = '⚠️ Off route — rerouting…';
-    speak('Off route, recalculating', true);
+    speak('You are off route. Recalculating now.', true);
     document.getElementById('dStatSpeed').textContent = Math.round(speedMph);
     var _limOff = getSpeedLimit(speedMph);
     document.getElementById('dStatSpeed').className = 'drive-stat-val' + (_limOff.over ? ' speed-warn' : '');
@@ -3876,9 +3931,11 @@ function onDrivePosition(pos) {
     updateInstruction(lat, lng, closest.idx);
   }
 
+  // Update country based on current position (for speed limits)
+  updateCountryFromPosition(lat, lng);
+
   // Check for nearby hazard reports ahead
   checkProximityAlerts(lat, lng);
-  // Show nearby POI markers
   updateProximityPOI(lat, lng);
 
   // Offline detection
@@ -3939,7 +3996,13 @@ function onDrivePosition(pos) {
   var limInfo = getSpeedLimit(speedMph);
   document.getElementById('dStatSpeed').className = 'drive-stat-val' + (limInfo.over ? ' speed-warn' : '');
   var limEl = document.getElementById('dStatLimit');
-  if (limEl) limEl.textContent = limInfo.limit + ' limit · ' + limInfo.road;
+  if (limEl) limEl.textContent = limInfo.limit + ' ' + (limInfo.unit||'mph') + ' limit · ' + limInfo.road;
+  // Update speed label to show km/h if in metric country
+  var sLbl = document.getElementById('dStatSpeedLbl');
+  if (sLbl) sLbl.textContent = limInfo.kmh ? 'KM/H' : 'MPH';
+  // Show km/h speed if in metric country
+  var dispSpeed = limInfo.kmh ? Math.round(speedMph * 1.60934) : Math.round(speedMph);
+  document.getElementById('dStatSpeed').textContent = dispSpeed;
   // Sync HUD if active
   var _instrEl = document.getElementById('driveInstruction');
   var _dDistEl = document.getElementById('dStatDist');
@@ -3979,11 +4042,34 @@ function updateInstruction(lat, lng, idx) {
 
   // Arrival check
   var distToEnd = L.latLng(lat, lng).distanceTo(L.latLng(pts[total-1][0], pts[total-1][1]));
-  if (distToEnd < 50) { instrEl.textContent = '🏁 You have arrived!'; speak('You have arrived at your destination', true); return; }
-  if (distToEnd < 200) { instrEl.textContent = '🏁 Destination ahead · ' + fmDist(distToEnd); speak('Destination ahead'); return; }
+  if (distToEnd < 50) { instrEl.textContent = '🏁 You have arrived!'; speak('You have reached your destination.', true); return; }
+  if (distToEnd < 200) { instrEl.textContent = '🏁 Destination ahead · ' + fmDist(distToEnd); speak('Your destination is just ahead.'); return; }
 
   // Starting
   if (idx < 3) { instrEl.textContent = '▶ Head towards destination'; return; }
+
+  // Lane advisory from TomTom guidance
+  var guidance = driveState.guidance || [];
+  var nextG = null, nextGDist = 999999;
+  for (var gi = 0; gi < guidance.length; gi++) {
+    var g = guidance[gi];
+    if (g.pointIdx > idx) {
+      var gpt = pts[Math.min(g.pointIdx, total-1)];
+      var gd  = L.latLng(lat, lng).distanceTo(L.latLng(gpt[0], gpt[1]));
+      if (gd < nextGDist && gd > 50) { nextGDist = gd; nextG = g; }
+      break;
+    }
+  }
+  if (nextG && nextGDist < 700 && nextGDist > 200) {
+    var mn = nextG.maneuver || '';
+    var adv = '';
+    if      (mn.includes('EXIT_RIGHT') || mn.includes('MOTORWAY_EXIT_RIGHT')) adv = 'Keep right - exit ahead';
+    else if (mn.includes('EXIT_LEFT')  || mn.includes('MOTORWAY_EXIT_LEFT'))  adv = 'Keep left - exit ahead';
+    else if (mn.includes('ROUNDABOUT')) { var en = nextG.roundaboutExit; adv = 'Roundabout ahead' + (en ? ' - exit ' + en : ''); }
+    else if (mn.includes('TURN_RIGHT') && nextGDist > 400) adv = 'Move right - turn ahead in ' + fmDist(nextGDist);
+    else if (mn.includes('TURN_LEFT')  && nextGDist > 400) adv = 'Move left - turn ahead in ' + fmDist(nextGDist);
+    if (adv) { instrEl.textContent = adv; if (nextGDist < 500) speakTurn(adv); return; }
+  }
 
   // Scan ahead up to 600m for the next significant turn
   var scanDist = 0;
@@ -4021,9 +4107,9 @@ function updateInstruction(lat, lng, idx) {
 
     // Urgency prefix
     var prefix;
-    if (d < 80)       { prefix = 'NOW — ';              speakTurn(wordSpoken + ' now'); }
-    else if (d < 150) { prefix = 'Soon — ';             speakTurn('Shortly, ' + wordSpoken); }
-    else if (d < 320) { prefix = 'In ' + fmDist(d) + ' — '; speakTurn('In ' + fmDist(d) + ', ' + wordSpoken); }
+    if (d < 80)       { prefix = 'NOW — ';              speakTurn(wordSpoken + ' now.'); }
+    else if (d < 150) { prefix = 'Soon — ';             speakTurn('Get ready to ' + wordSpoken.toLowerCase() + ' shortly.'); }
+    else if (d < 320) { prefix = 'In ' + fmDist(d) + ' — '; speakTurn('In ' + fmDist(d) + ', ' + wordSpoken.toLowerCase() + '.'); }
     else              { prefix = 'In ' + fmDist(d) + ' — '; }
 
     instrEl.textContent = prefix + word;
@@ -4038,8 +4124,32 @@ function updateInstruction(lat, lng, idx) {
 // ── VOICE NAVIGATION ─────────────────────────────────────────────────────────
 // Modes: 'off' | 'alerts' (safety critical only) | 'full' (everything)
 var _voiceMode    = localStorage.getItem('vn_voice_mode') || 'full';
-var _lastSpoken   = {};   // key -> timestamp, track per-phrase repeat
-var _REPEAT_DELAY = 20000; // 20 seconds
+var _voiceName    = localStorage.getItem('vn_voice_name') || '';
+var _lastSpoken   = {};
+var _REPEAT_DELAY = 20000;
+var _availableVoices = [];
+
+function loadVoices() { _availableVoices = window.speechSynthesis ? window.speechSynthesis.getVoices() : []; }
+if (window.speechSynthesis) { loadVoices(); window.speechSynthesis.onvoiceschanged = loadVoices; }
+
+function getSelectedVoice() {
+  if (!_availableVoices.length) loadVoices();
+  if (_voiceName) { var v = _availableVoices.find(function(v){ return v.name === _voiceName; }); if (v) return v; }
+  return _availableVoices.find(function(v){ return v.lang === 'en-GB'; }) ||
+         _availableVoices.find(function(v){ return v.lang.startsWith('en'); }) || null;
+}
+
+function setVoiceName(name) { _voiceName = name; localStorage.setItem('vn_voice_name', name); speak('Voice changed.', true); }
+
+function renderVoiceSelector() {
+  loadVoices();
+  var voices = _availableVoices.filter(function(v){ return v.lang.startsWith('en'); });
+  if (!voices.length) return '<p style="color:var(--muted);font-size:0.8rem">No voices found. Check device TTS settings.</p>';
+  var opts = voices.map(function(v){ return '<option value="' + v.name + '" ' + (_voiceName===v.name?'selected':'') + '>'
+    + v.name + ' (' + v.lang + ')' + (v.localService?' [offline]':'') + '</option>'; }).join('');
+  return '<select onchange="setVoiceName(this.value)" style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--fg);font-size:0.85rem">'
+    + opts + '</select><div style="font-size:0.65rem;color:var(--muted);margin-top:4px">[offline] = works without internet</div>';
+}
 
 // Safety critical report types — always spoken in 'alerts' mode
 var _VOICE_CRITICAL = ['police','mobile_cam','accident','lowbridge','closure','flooding'];
@@ -4054,7 +4164,8 @@ function speak(text, force) {
   _lastSpoken[text] = now;
   window.speechSynthesis.cancel();
   var utt = new SpeechSynthesisUtterance(text);
-  utt.lang = 'en-GB'; utt.rate = 0.95; utt.pitch = 1.0; utt.volume = 1.0;
+  var sv = getSelectedVoice(); if (sv) utt.voice = sv;
+  utt.lang = 'en-GB'; utt.rate = 0.92; utt.pitch = 1.0; utt.volume = 1.0;
   window.speechSynthesis.speak(utt);
 }
 
@@ -4083,8 +4194,7 @@ function setVoiceMode(mode) {
   var labels = { off:'🔇 Voice off', alerts:'⚠️ Alerts only', poi:'📍 POI + Alerts', full:'🔊 Full voice' };
   var btn = document.getElementById('btnVoice');
   if (btn) btn.textContent = { off:'🔇', alerts:'⚠️', poi:'📍', full:'🔊' }[mode] || '🔊';
-  var modeNames = { off:'off', alerts:'alerts only', poi:'P O I and alerts', full:'full' };
-  if (mode !== 'off') speak('Voice set to ' + (modeNames[mode] || mode), true);
+  if (mode !== 'off') speak('Voice set to ' + mode, true);
   render();
 }
 
@@ -4092,6 +4202,68 @@ function cycleVoiceMode() {
   var modes = ['full','poi','alerts','off'];
   var next  = modes[(modes.indexOf(_voiceMode) + 1) % modes.length];
   setVoiceMode(next);
+}
+
+// ── MULTI-COUNTRY SUPPORT ────────────────────────────────────────────────────
+
+// Country bounding boxes for quick detection
+var _COUNTRY_BOUNDS = [
+  { code:'GB', name:'United Kingdom', minLat:49.9, maxLat:60.9, minLng:-8.2, maxLng:1.8 },
+  { code:'FR', name:'France',         minLat:41.3, maxLat:51.1, minLng:-5.2, maxLng:9.6 },
+  { code:'DE', name:'Germany',        minLat:47.3, maxLat:55.1, minLng:5.9,  maxLng:15.1 },
+  { code:'NL', name:'Netherlands',    minLat:50.7, maxLat:53.6, minLng:3.3,  maxLng:7.2 },
+  { code:'BE', name:'Belgium',        minLat:49.5, maxLat:51.5, minLng:2.5,  maxLng:6.4 },
+  { code:'ES', name:'Spain',          minLat:36.0, maxLat:43.8, minLng:-9.3, maxLng:3.3 },
+  { code:'IE', name:'Ireland',        minLat:51.4, maxLat:55.4, minLng:-10.5,maxLng:-6.0 },
+  { code:'IT', name:'Italy',          minLat:36.6, maxLat:47.1, minLng:6.6,  maxLng:18.5 },
+  { code:'PL', name:'Poland',         minLat:49.0, maxLat:54.9, minLng:14.1, maxLng:24.2 },
+];
+
+// Speed limits (mph equivalent) by country, vehicle type, road type
+// Values stored in km/h, converted to mph for display if needed
+var _COUNTRY_LIMITS = {
+  GB: { motorway:{van:70,lgv:70,hgv:60,coach:70,motorhome:70}, dual:{van:60,lgv:60,hgv:60,coach:60,motorhome:60}, single:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, builtup:{van:30,lgv:30,hgv:30,coach:30,motorhome:30}, unit:'mph' },
+  FR: { motorway:{van:130,lgv:130,hgv:90,coach:100,motorhome:110}, dual:{van:110,lgv:110,hgv:80,coach:100,motorhome:110}, single:{van:80,lgv:80,hgv:80,coach:80,motorhome:80}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  DE: { motorway:{van:130,lgv:130,hgv:80,coach:100,motorhome:100}, dual:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, single:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  NL: { motorway:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, dual:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, single:{van:80,lgv:80,hgv:80,coach:80,motorhome:80}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  BE: { motorway:{van:120,lgv:120,hgv:90,coach:120,motorhome:120}, dual:{van:90,lgv:90,hgv:90,coach:90,motorhome:90}, single:{van:70,lgv:70,hgv:70,coach:70,motorhome:70}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  ES: { motorway:{van:120,lgv:120,hgv:90,coach:100,motorhome:100}, dual:{van:100,lgv:100,hgv:90,coach:100,motorhome:100}, single:{van:90,lgv:90,hgv:80,coach:90,motorhome:90}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  IE: { motorway:{van:120,lgv:120,hgv:80,coach:100,motorhome:100}, dual:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, single:{van:80,lgv:80,hgv:80,coach:80,motorhome:80}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  IT: { motorway:{van:130,lgv:130,hgv:80,coach:100,motorhome:110}, dual:{van:110,lgv:110,hgv:80,coach:100,motorhome:110}, single:{van:90,lgv:90,hgv:80,coach:90,motorhome:90}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+  PL: { motorway:{van:140,lgv:140,hgv:80,coach:100,motorhome:120}, dual:{van:100,lgv:100,hgv:80,coach:100,motorhome:100}, single:{van:90,lgv:90,hgv:70,coach:90,motorhome:90}, builtup:{van:50,lgv:50,hgv:50,coach:50,motorhome:50}, unit:'kmh' },
+};
+
+var _currentCountry = 'GB'; // default UK
+
+function detectCountry(lat, lng) {
+  for (var i = 0; i < _COUNTRY_BOUNDS.length; i++) {
+    var b = _COUNTRY_BOUNDS[i];
+    if (lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng) {
+      return b.code;
+    }
+  }
+  return 'GB'; // fallback
+}
+
+function getRouteCountry() {
+  // Detect country from destination coordinates
+  if (state.toCoords) {
+    return detectCountry(state.toCoords[0], state.toCoords[1]);
+  }
+  if (state.fromCoords) {
+    return detectCountry(state.fromCoords[0], state.fromCoords[1]);
+  }
+  return 'GB';
+}
+
+function updateCountryFromPosition(lat, lng) {
+  var c = detectCountry(lat, lng);
+  if (c !== _currentCountry) {
+    _currentCountry = c;
+    var name = (_COUNTRY_BOUNDS.find(function(b){ return b.code === c; }) || {}).name || c;
+    setStatus('Speed limits updated for ' + name, 'live');
+    speak('Entering ' + name + '. Speed limits updated.', true);
+  }
 }
 
 // ── UK SPEED LIMITS ─────────────────────────────────────────────────────────
@@ -4134,8 +4306,17 @@ function getSpeedLimit(speedMph) {
   var vType = (state.vehicle && state.vehicle.type) ? state.vehicle.type : 'van';
   if (!_LIMITS.motorway[vType]) vType = 'van';
   var road  = detectRoadType(speedMph);
-  var limit = (_LIMITS[road][vType] || _LIMITS[road].van);
-  return { limit: limit, road: _ROAD_LABELS[road], over: speedMph > limit };
+
+  // Use country-aware limits if available
+  var countryLimits = _COUNTRY_LIMITS[_currentCountry] || _COUNTRY_LIMITS.GB;
+  var isKmh = countryLimits.unit === 'kmh';
+
+  // Convert current speed to correct unit for comparison
+  var speedInUnit = isKmh ? speedMph * 1.60934 : speedMph;
+  var limit = (countryLimits[road][vType] || countryLimits[road].van);
+  var unit  = isKmh ? 'km/h' : 'mph';
+
+  return { limit: limit, unit: unit, road: _ROAD_LABELS[road], over: speedInUnit > limit, kmh: isKmh };
 }
 
 // -- PROXIMITY POI MARKERS --------------------------------------------------
@@ -4144,29 +4325,22 @@ var _poiProximityMarkers = {};
 function updateProximityPOI(lat, lng) {
   if (!driveState || !driveState.active) return;
   if (!poiState || !poiState.results || !poiState.results.length) return;
-  // Only announce POI if voice mode includes poi or full
   var canSpeakPOI = (_voiceMode === 'full' || _voiceMode === 'poi');
-  var SHOW_DIST = 150;
   var colour = poiState.colour || '#f5a623';
   var emoji  = poiState.emoji  || '!';
-
   poiState.results.forEach(function(p, i) {
     var dist = L.latLng(lat, lng).distanceTo(L.latLng(p.lat, p.lng));
     var key  = 'poi_' + i;
-    if (dist < SHOW_DIST) {
+    if (dist < 150) {
       if (!_poiProximityMarkers[key]) {
-        var opacity = Math.max(0.4, 1 - (dist / 200));
         var icon = L.divIcon({
-          html: '<div style="background:' + colour + ';border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;box-shadow:0 2px 10px rgba(0,0,0,0.6);opacity:' + opacity + '">' + emoji + '</div>',
+          html: '<div style="background:' + colour + ';border:2px solid #fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;box-shadow:0 2px 10px rgba(0,0,0,0.6)">' + emoji + '</div>',
           className:'', iconAnchor:[14,14]
         });
         _poiProximityMarkers[key] = L.marker([p.lat, p.lng], {icon:icon, zIndexOffset:500})
-          .bindPopup('<strong>' + p.name + '</strong><br><small>' + p.addr + '</small><br><small style="color:#aaa">' + Math.round(dist) + 'm away</small>')
+          .bindPopup('<strong>' + p.name + '</strong><br><small>' + p.addr + '</small>')
           .addTo(map);
-        if (dist < 80 && canSpeakPOI) {
-          _poiProximityMarkers[key].openPopup();
-          speak(p.name + ' nearby, ' + Math.round(dist) + ' metres');
-        }
+        if (dist < 80 && canSpeakPOI) speak(p.name + ' is ' + Math.round(dist) + ' metres away.');
       }
     } else {
       if (_poiProximityMarkers[key]) {
@@ -4262,6 +4436,12 @@ function dismissDriveAlert() {
     banner._curId = null;
     if (_alertTimer) { clearTimeout(_alertTimer); _alertTimer = null; }
   }
+}
+
+// -- SECURITY: XSS sanitization -----------------------------------------
+function sanitizeText(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
 
 function getBearing(from, to) {
@@ -4373,7 +4553,7 @@ async function autoRerouteFromPos(fromLat, fromLng) {
     }
 
     document.getElementById('driveInstruction').textContent = '✅ Route updated — continue ahead';
-    speak('Route updated, continue ahead');
+    speak('Route updated. Continue straight ahead.');
     setTimeout(function() {
       var el = document.getElementById('driveInstruction');
       if (el && el.textContent.includes('Route updated')) el.textContent = 'Follow the route';
@@ -4614,7 +4794,7 @@ function stopNavigation() {
       </div>
     </div>
     <button class="drive-recalc" id="driveRecalc" onclick="recalcRoute()">⟳ Recalculate Route</button>
-    <button id="btnReturnPos" onclick="returnToPosition()" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:var(--amber);color:#000;border:none;border-radius:20px;padding:8px 14px;font-size:0.8rem;font-weight:800;cursor:pointer;align-items:center;gap:6px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.4)">📍 Return to position <span style="font-size:0.7rem;opacity:0.7">(auto in 8s)</span></button>
+    <button id="btnReturnPos" onclick="returnToPosition()" style="display:none;position:absolute;top:12px;right:12px;background:var(--amber);color:#000;border:none;border-radius:20px;padding:8px 14px;font-size:0.8rem;font-weight:800;cursor:pointer;align-items:center;gap:6px;z-index:10;box-shadow:0 2px 10px rgba(0,0,0,0.4)">📍 Return to position <span style="font-size:0.7rem;opacity:0.7">(auto in 8s)</span></button>
     <div style="display:flex;gap:6px;margin-bottom:8px;align-items:stretch">
       <button class="drive-stop" style="flex:1;min-width:0" onclick="stopNavigation()">■ Stop</button>
       <button onclick="toggle3D()" id="btn3D" style="flex:0 0 48px;background:var(--s1);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:0.75rem;font-weight:800;cursor:pointer;padding:0">3D</button>
