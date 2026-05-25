@@ -66,7 +66,7 @@ VanNav Pro is a mobile-first navigation web app designed specifically for profes
 
 ## Vehicle Profiles
 
-24 presets across 4 categories — van, LGV, HGV, coach, motorhome. Set your height, width, weight and length once and the app handles the rest.
+24 presets across 4 categories — Van, LGV, HGV, Coach, Motorhome. Set your height, width, weight and length once and the app handles the rest.
 
 ---
 
@@ -84,13 +84,20 @@ VanNav Pro is a mobile-first navigation web app designed specifically for profes
 
 ## Roadmap
 
-- [ ] Multi-stop route planning
-- [ ] Lane guidance
+### Completed
+- [x] Multi-stop route planning
+- [x] Lane guidance (advisory — get in position warnings)
+- [x] Multi-country speed limits (feature/multi-country branch)
+- [x] Voice navigation with gender/voice selection
+- [x] HUD windscreen projection mode
+- [x] Live traffic overlay
+- [x] Proximity POI during drive mode
+
+### In Progress
 - [ ] Live fuel prices
 - [ ] Taxi driver mode
-- [ ] Android / Play Store release (Capacitor)
-- [ ] Android Auto support
-- [ ] Multi-country speed limits (in progress — feature/multi-country branch)
+- [ ] Android / Play Store release (Capacitor wrapper ready)
+- [ ] Android Auto support (requires Play Store first)
 
 ---
 
