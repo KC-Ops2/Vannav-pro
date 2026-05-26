@@ -8,7 +8,7 @@
 
 ## What is VanNav Pro?
 
-VanNav Pro is a mobile-first navigation web app designed specifically for professional van and HGV drivers in the UK. Unlike generic sat-nav apps, VanNav Pro understands the real challenges of commercial driving — low bridges, weight restrictions, clean air zones, HGV speed limits, and community hazard reporting.
+VanNav Pro is a mobile-first navigation web app designed specifically for professional Van and HGV drivers in the UK. Unlike generic sat-nav apps, VanNav Pro understands the real challenges of commercial driving — low bridges, weight restrictions, clean air zones, HGV speed limits, and community hazard reporting.
 
 ---
 
