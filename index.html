@@ -1364,7 +1364,7 @@ function toggleTraffic() {
   if (_trafficEnabled) {
     _trafficLayer = L.tileLayer(
       'https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key=' + state.ttKey,
-      { opacity: 0.7, zIndex: 5, attribution: '© TomTom' }
+      { opacity: 0.8, zIndex: 5, minZoom: 5, maxZoom: 19, attribution: '© TomTom' }
     );
     _trafficLayer.addTo(map);
     if (btn) { btn.style.background = 'var(--amber)'; btn.style.color = '#000'; }
