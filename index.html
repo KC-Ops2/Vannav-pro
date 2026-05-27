@@ -471,6 +471,20 @@ select option { background: var(--s2); }
   cursor: pointer; z-index: 10000;
 }
 
+/* Temperature notification */
+#tempNotif {
+  position: fixed; top: 12px; right: 12px; z-index: 9000;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 8px 12px;
+  display: none; align-items: center; gap: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+  font-size: 0.8rem; font-weight: 700;
+  animation: bannerIn 0.3s ease;
+}
+#tempNotif .tn-icon { font-size: 1.1rem; }
+#tempNotif .tn-msg  { color: var(--fg); }
+#tempNotif .tn-temp { font-family: var(--mono); margin-left: 4px; }
+
 /* Alert banner */
 #driveAlertBanner {
   position:absolute; top:10px; left:10px; right:10px; z-index:50;
@@ -3136,6 +3150,7 @@ function locateMe() {
     placePin('A', lat, lng);
     setStatus('Location found — looking up address…', 'live');
     render();
+    fetchWeather(lat, lng);
     // Reverse geocode to show a real address
     fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&zoom=16')
       .then(function(r) { return r.json(); })
@@ -3987,6 +4002,9 @@ function onDrivePosition(pos) {
   // Update country based on current position (for speed limits)
   updateCountryFromPosition(lat, lng);
 
+  // Fetch temperature every 5 mins
+  fetchWeather(lat, lng);
+
   // Check for nearby hazard reports ahead
   checkProximityAlerts(lat, lng);
   updateProximityPOI(lat, lng);
@@ -4524,6 +4542,66 @@ function sanitizeText(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
 
+// -- TEMPERATURE / WEATHER --------------------------------------------------
+var _lastWeatherFetch = 0;
+var _lastWeatherLat   = null;
+var _lastWeatherLng   = null;
+var _currentTemp      = null;
+
+function fetchWeather(lat, lng) {
+  var now = Date.now();
+  // Only fetch every 5 minutes or if moved more than 2km
+  var moved = _lastWeatherLat ? L.latLng(lat,lng).distanceTo(L.latLng(_lastWeatherLat,_lastWeatherLng)) : 9999;
+  if (now - _lastWeatherFetch < 300000 && moved < 2000) return;
+  _lastWeatherFetch = now;
+  _lastWeatherLat   = lat;
+  _lastWeatherLng   = lng;
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=' + lat.toFixed(4) + '&longitude=' + lng.toFixed(4) + '&current=temperature_2m,weather_code&wind_speed_unit=mph&temperature_unit=celsius')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d.current) return;
+      var temp = Math.round(d.current.temperature_2m);
+      _currentTemp = temp;
+      updateTempDisplay(temp);
+    })
+    .catch(function(){});
+}
+
+function updateTempDisplay(temp) {
+  var el = document.getElementById('dStatTemp');
+  if (!el) return;
+  el.textContent = temp + '°C';
+  // Colour code by temperature
+  if (temp <= 0)       { el.style.color = '#64b5f6'; checkTempAlert(temp); }  // blue — black ice
+  else if (temp <= 3)  { el.style.color = '#90caf9'; checkTempAlert(temp); }  // light blue — ice risk
+  else if (temp >= 35) { el.style.color = '#ef5350'; checkTempAlert(temp); }  // red — extreme heat
+  else if (temp >= 28) { el.style.color = '#ffa726'; checkTempAlert(temp); }  // orange — hot
+  else                 { el.style.color = 'var(--amber)'; }                   // normal
+}
+
+var _lastTempAlert = 0;
+var _tempNotifTimer = null;
+function checkTempAlert(temp) {
+  if (Date.now() - _lastTempAlert < 300000) return;
+  _lastTempAlert = Date.now();
+  var icon, msg, color;
+  if      (temp <= 0)  { icon = '🧊'; msg = 'Black ice risk'; color = '#64b5f6'; }
+  else if (temp <= 3)  { icon = '❄️'; msg = 'Ice risk on roads'; color = '#90caf9'; }
+  else if (temp >= 35) { icon = '🔥'; msg = 'Extreme heat'; color = '#ef5350'; }
+  else if (temp >= 28) { icon = '🌡️'; msg = 'High temperature'; color = '#ffa726'; }
+  else return;
+  var el = document.getElementById('tempNotif');
+  if (!el) return;
+  el.querySelector('.tn-icon').textContent = icon;
+  el.querySelector('.tn-msg').textContent  = msg;
+  el.querySelector('.tn-temp').textContent = temp + '°C';
+  el.querySelector('.tn-temp').style.color = color;
+  el.style.borderColor = color;
+  el.style.display = 'flex';
+  if (_tempNotifTimer) clearTimeout(_tempNotifTimer);
+  _tempNotifTimer = setTimeout(function() { el.style.display = 'none'; }, 10000);
+}
+
 function getBearing(from, to) {
   var lat1 = from[0] * Math.PI/180, lat2 = to[0] * Math.PI/180;
   var dLng = (to[1] - from[1]) * Math.PI/180;
@@ -4837,6 +4915,9 @@ function stopNavigation() {
   <button class="hud-exit" onclick="toggleHUD()">✕ Exit HUD</button>
 </div>
 
+<!-- Temperature notification -->
+<div id="tempNotif"><span class="tn-icon"></span><span class="tn-msg"></span><span class="tn-temp"></span></div>
+
 <!-- Drive Mode Overlay -->
 <div class="drive-overlay hidden" id="driveOverlay">
   <div class="drive-gps-bar">
@@ -4871,6 +4952,10 @@ function stopNavigation() {
       <div class="drive-stat">
         <div class="drive-stat-val" id="dStatCompass" style="font-size:1.2rem">--</div>
         <div class="drive-stat-lbl">Facing</div>
+      </div>
+      <div class="drive-stat">
+        <div class="drive-stat-val" id="dStatTemp" style="font-size:1.1rem">--</div>
+        <div class="drive-stat-lbl">Temp</div>
       </div>
     </div>
     <button class="drive-recalc" id="driveRecalc" onclick="recalcRoute()">⟳ Recalculate Route</button>
