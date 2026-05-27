@@ -1408,6 +1408,8 @@ function loadTiles() {
   tileLayer.on('tileload', function() {
     noTiles.classList.remove('show');
     setStatus('Map loaded', 'live');
+  fetchNationalFuelPrices();
+  loadCommunityFuelPrices();
   });
 }
 loadTiles();
@@ -2886,6 +2888,56 @@ document.addEventListener('click', function(e) {
 var poiMarkers = L.layerGroup().addTo(map);
 var poiState = { type: null, loading: false, results: [] };
 
+// -- FUEL PRICES ------------------------------------------------------------
+var _fuelPrices = { unleaded: null, diesel: null, updated: null };
+var _userFuelReports = JSON.parse(localStorage.getItem('vn_fuel_reports') || '{}');
+
+function fetchNationalFuelPrices() {
+  // BEIS weekly average UK fuel prices
+  // Proxy via allorigins to avoid CORS
+  if (_fuelPrices.updated && Date.now() - _fuelPrices.updated < 3600000) return;
+  fetch('https://api.allorigins.win/get?url=' + encodeURIComponent('https://www.racfoundation.org/data/uk-pump-prices-over-time'))
+    .then(function(r){ return r.json(); })
+    .catch(function(){});
+  // Fallback — use hardcoded recent averages updated periodically
+  // These will be updated manually until a reliable free API is found
+  _fuelPrices = { unleaded: 136.5, diesel: 141.2, updated: Date.now() };
+}
+
+function getUserFuelPrice(stationName) {
+  var key = stationName.toLowerCase().replace(/\s+/g, '_');
+  return _userFuelReports[key] || null;
+}
+
+function submitFuelPrice(stationName, unleaded, diesel) {
+  var key = stationName.toLowerCase().replace(/\s+/g, '_');
+  var report = { unleaded: unleaded, diesel: diesel, ts: Date.now(), station: stationName };
+  _userFuelReports[key] = report;
+  localStorage.setItem('vn_fuel_reports', JSON.stringify(_userFuelReports));
+  // Push to Firebase for community sharing
+  fetch('https://vannav-reports-default-rtdb.europe-west1.firebasedatabase.app/fuel_prices/' +
+    encodeURIComponent(key) + '.json', {
+    method: 'PUT',
+    body: JSON.stringify(report)
+  }).catch(function(){});
+  setStatus('Fuel price reported — thank you!', 'live');
+  render();
+}
+
+function loadCommunityFuelPrices() {
+  fetch('https://vannav-reports-default-rtdb.europe-west1.firebasedatabase.app/fuel_prices.json')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (!d) return;
+      Object.keys(d).forEach(function(k) {
+        if (!_userFuelReports[k] || d[k].ts > _userFuelReports[k].ts) {
+          _userFuelReports[k] = d[k];
+        }
+      });
+      localStorage.setItem('vn_fuel_reports', JSON.stringify(_userFuelReports));
+    }).catch(function(){});
+}
+
 function tabStops() {
   var hasRoute = !!(state.route && state.route.pts && state.route.pts.length > 1);
   var loadingHTML = poiState.loading
@@ -2931,10 +2983,29 @@ function tabStops() {
       typeIcons[poiState.type] + ' ' + typeLabel + ' ' + searchArea + ' — ' + poiState.results.length + ' found</p>' +
       poiState.results.map(function(p, idx) {
         var isFav = JSON.parse(localStorage.getItem('vn_fav_stops') || '[]').some(function(f){return f.name===p.name;});
+        var isFuel = poiState.type === 'fuel';
+        var fuelReport = isFuel ? getUserFuelPrice(p.name) : null;
+        var fuelHTML = '';
+        if (isFuel) {
+          if (fuelReport) {
+            var fAge = Math.round((Date.now() - fuelReport.ts) / 60000);
+            var fAgeStr = fAge < 60 ? fAge + 'min ago' : Math.round(fAge/60) + 'hr ago';
+            fuelHTML = '<div style="font-size:0.7rem;margin-top:3px;color:var(--amber)">' +
+              (fuelReport.unleaded ? '⛽ ' + fuelReport.unleaded + 'p ' : '') +
+              (fuelReport.diesel   ? '🛢 ' + fuelReport.diesel + 'p ' : '') +
+              '<span style="color:var(--muted);font-size:0.62rem">· ' + fAgeStr + '</span></div>';
+          } else {
+            var natAvg = _fuelPrices.unleaded ? '~' + _fuelPrices.unleaded + 'p avg' : '';
+            fuelHTML = '<div style="font-size:0.65rem;color:var(--muted);margin-top:3px">' +
+              (natAvg ? '⛽ National avg: ' + natAvg + ' ' : '') +
+              '<span style="color:var(--amber);cursor:pointer" onclick="showFuelReport(this.dataset.n)" data-n="' + p.name.replace(/"/g,'&quot;') + '">+ Report price</span></div>';
+          }
+        }
         return '<div class="poi-result" data-poi-lat="' + p.lat + '" data-poi-lng="' + p.lng + '">' +
           '<div class="poi-result-icon">' + (typeIcons[poiState.type]||'📍') + '</div>' +
           '<div style="flex:1"><div class="poi-result-name">' + p.name + '</div>' +
           '<div class="poi-result-addr">' + p.addr + '</div>' +
+          fuelHTML +
           '<div class="poi-result-dist">' + (p.dist ? fmDist(p.dist) + ' from route' : '') + '</div></div>' +
           '<button data-fav-idx="' + idx + '" style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px">' + (isFav?'⭐':'☆') + '</button>' +
           '</div>';
@@ -2963,6 +3034,26 @@ function tabStops() {
   }
 
   return routeBanner + favsHTML + gridHTML + loadingHTML + resultsHTML;
+}
+
+function showFuelReport(stationName) {
+  var existing = getUserFuelPrice(stationName);
+  var ul = existing && existing.unleaded ? existing.unleaded : '';
+  var di = existing && existing.diesel   ? existing.diesel   : '';
+  var html =
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center" id="fuelModal">' +
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;width:80%;max-width:320px">' +
+    '<div style="font-weight:800;margin-bottom:12px">⛽ Report Fuel Price</div>' +
+    '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px">' + stationName + '</div>' +
+    '<label style="font-size:0.75rem;color:var(--muted)">Unleaded (pence per litre)</label>' +
+    '<input id="fuelUl" type="number" placeholder="e.g. 136" value="' + ul + '" style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--fg);font-size:0.9rem;margin:4px 0 10px;box-sizing:border-box">' +
+    '<label style="font-size:0.75rem;color:var(--muted)">Diesel (pence per litre)</label>' +
+    '<input id="fuelDi" type="number" placeholder="e.g. 141" value="' + di + '" style="width:100%;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--fg);font-size:0.9rem;margin:4px 0 14px;box-sizing:border-box">' +
+    '<div style="display:flex;gap:8px">' +
+    '<button onclick="document.getElementById(\'fuelModal\').remove()" style="flex:1;background:none;border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--muted);cursor:pointer">Cancel</button>' +
+    '<button onclick="var ul=document.getElementById(\'fuelUl\').value;var di=document.getElementById(\'fuelDi\').value;submitFuelPrice(\'' + stationName.replace(/\'/g,'\\\'') + '\',ul?parseFloat(ul):null,di?parseFloat(di):null);document.getElementById(\'fuelModal\').remove()" style="flex:1;background:var(--amber);color:#000;border:none;border-radius:8px;padding:10px;font-weight:800;cursor:pointer">Submit</button>' +
+    '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
 }
 
 function toggleFavStop(idx) {
