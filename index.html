@@ -1515,18 +1515,25 @@ async function fetchSpeedCameras(routePts) {
   var s = Math.min.apply(null,lats)-pad, n = Math.max.apply(null,lats)+pad;
   var w = Math.min.apply(null,lngs)-pad, e = Math.max.apply(null,lngs)+pad;
 
-  // Overpass QL query — all camera types including motorway HADECS/SPECS
-  var query = '[out:json][timeout:25];(' +
-    'node["highway"="speed_camera"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["enforcement"="speed_camera"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["enforcement"="average_speed"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["enforcement"="check"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["man_made"="speed_camera"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["device"="speed_camera"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["camera:type"="speed"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["camera:type"="HADECS"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-    'node["operator"="Highways England"]["highway"="speed_camera"](' + s + ',' + w + ',' + n + ',' + e + ');' +
-  ');out body;';
+  // Overpass QL query — nodes AND ways for average speed zones (SPECS/HADECS)
+  var bb = s + ',' + w + ',' + n + ',' + e;
+  var query = '[out:json][timeout:30];(' +
+    'node["highway"="speed_camera"](' + bb + ');' +
+    'node["enforcement"="speed_camera"](' + bb + ');' +
+    'node["enforcement"="average_speed"](' + bb + ');' +
+    'node["enforcement"="check"](' + bb + ');' +
+    'node["man_made"="speed_camera"](' + bb + ');' +
+    'node["device"="speed_camera"](' + bb + ');' +
+    'node["camera:type"="speed"](' + bb + ');' +
+    'node["camera:type"="HADECS"](' + bb + ');' +
+    'node["camera:type"="SPECS"](' + bb + ');' +
+    'node["camera:type"="average"](' + bb + ');' +
+    'node["operator"="Highways England"]["highway"="speed_camera"](' + bb + ');' +
+    'node["operator"="National Highways"]["highway"="speed_camera"](' + bb + ');' +
+    'way["enforcement"="average_speed"](' + bb + ');' +
+    'way["camera:type"="SPECS"](' + bb + ');' +
+    'way["camera:type"="HADECS"](' + bb + ');' +
+  ');out center body;';
 
   try {
     var res = await fetch('https://overpass-api.de/api/interpreter', {
@@ -1536,13 +1543,20 @@ async function fetchSpeedCameras(routePts) {
     var data = await res.json();
     var elements = data.elements || [];
 
-    // Filter to only cameras within ~200m of actual route
-    // Widen filter slightly for motorways — cameras can be offset from centreline
+    // Handle way elements (average speed zones) — use center point
+    elements.forEach(function(el) {
+      if (el.type === 'way' && el.center) {
+        el.lat = el.center.lat;
+        el.lon = el.center.lon;
+      }
+    });
+    // Filter to cameras within ~250m of route
     var onRoute = elements.filter(function(el) {
+      if (!el.lat || !el.lon) return false;
       return routePts.some(function(p) {
         var dlat = p[0] - el.lat;
         var dlng = p[1] - el.lon;
-        return (dlat*dlat + dlng*dlng) < 0.000016; // ~400m — wider for motorways
+        return (dlat*dlat + dlng*dlng) < 0.000025; // ~250m
       });
     });
 
@@ -1568,17 +1582,30 @@ async function fetchSpeedCameras(routePts) {
         else if (highway === 'primary') speed = 60;
         else if (highway === 'secondary' || highway === 'residential') speed = 30;
       }
-      var isAvg = (tags.enforcement === 'average_speed' || 
-                   (tags['camera:type'] || '').toLowerCase().includes('hadecs') ||
-                   (tags['camera:type'] || '').toLowerCase().includes('specs'));
+      var camType = (tags['camera:type'] || '').toLowerCase();
+      var isAvg = (
+        tags.enforcement === 'average_speed' ||
+        el.type === 'way' || // ways are almost always average speed zones
+        camType.includes('hadecs') ||
+        camType.includes('specs') ||
+        camType.includes('average') ||
+        tags['camera:mount'] === 'gantry'
+      );
       var isMobile = tags.enforcement === 'check';
+      var lastCheck = tags['check_date'] || tags['survey:date'] || '';
+      var isStale = false;
+      if (lastCheck) {
+        var checkYear = parseInt(lastCheck.slice(0,4));
+        if (!isNaN(checkYear) && checkYear < new Date().getFullYear() - 2) isStale = true;
+      }
       return {
         lat:   el.lat,
         lng:   el.lon,
         speed: speed,
         unit:  'mph',
         type:  isAvg ? 'average' : isMobile ? 'mobile' : 'fixed',
-        ref:   tags.ref || tags.name || tags.description || ''
+        ref:   tags.ref || tags.name || tags.description || '',
+        stale: isStale
       };
     });
 
@@ -1586,8 +1613,9 @@ async function fetchSpeedCameras(routePts) {
     state.cameras.forEach(function(cam) {
       var isAvg    = cam.type === 'average';
       var isMobile = cam.type === 'mobile';
-      var bg    = isAvg ? '#6a1b9a' : isMobile ? '#e65100' : '#c62828';
+      var bg    = cam.stale ? '#555' : isAvg ? '#6a1b9a' : isMobile ? '#e65100' : '#c62828';
       var emoji = isAvg ? '📏' : isMobile ? '🚐' : '📷';
+      var opacity = cam.stale ? '0.5' : '1';
       var speedTxt = cam.speed ? cam.speed + '' : '70'; // default 70 if unknown
       var icon = L.divIcon({
         html: '<div style="background:' + bg + ';border:2.5px solid #fff;border-radius:6px;' +
@@ -4242,15 +4270,43 @@ function updateInstruction(lat, lng, idx) {
       break;
     }
   }
-  if (nextG && nextGDist < 700 && nextGDist > 200) {
+  if (nextG && nextGDist < 1800 && nextGDist > 50) {
     var mn = nextG.maneuver || '';
-    var adv = '';
-    if      (mn.includes('EXIT_RIGHT') || mn.includes('MOTORWAY_EXIT_RIGHT')) adv = 'Keep right - exit ahead';
-    else if (mn.includes('EXIT_LEFT')  || mn.includes('MOTORWAY_EXIT_LEFT'))  adv = 'Keep left - exit ahead';
-    else if (mn.includes('ROUNDABOUT')) { var en = nextG.roundaboutExit; adv = 'Roundabout ahead' + (en ? ' - exit ' + en : ''); }
-    else if (mn.includes('TURN_RIGHT') && nextGDist > 400) adv = 'Move right - turn ahead in ' + fmDist(nextGDist);
-    else if (mn.includes('TURN_LEFT')  && nextGDist > 400) adv = 'Move left - turn ahead in ' + fmDist(nextGDist);
-    if (adv) { instrEl.textContent = adv; if (nextGDist < 500) speakTurn(adv); return; }
+    var adv = '', spokenAdv = '';
+    var isMotorwayExit = mn.includes('EXIT_RIGHT') || mn.includes('EXIT_LEFT') ||
+                         mn.includes('MOTORWAY_EXIT_RIGHT') || mn.includes('MOTORWAY_EXIT_LEFT');
+    var exitSide = (mn.includes('RIGHT') || mn.includes('EXIT_RIGHT')) ? 'right' : 'left';
+    var exitRef  = nextG.exitNo ? ' (exit ' + nextG.exitNo + ')' : '';
+
+    if (isMotorwayExit) {
+      // Escalating motorway exit warnings
+      if (nextGDist > 1400) {
+        adv = '🛣️ Exit in ' + fmDist(nextGDist) + ' — prepare to move ' + exitSide + exitRef;
+        spokenAdv = 'In ' + fmDist(nextGDist) + ', take the ' + exitSide + ' exit' + exitRef + '.';
+      } else if (nextGDist > 800) {
+        adv = '⚠️ Exit in ' + fmDist(nextGDist) + ' — move ' + exitSide + ' now' + exitRef;
+        spokenAdv = 'Exit in ' + fmDist(nextGDist) + '. Move to the ' + exitSide + ' lane' + exitRef + '.';
+      } else if (nextGDist > 300) {
+        adv = '⚠️ Take exit ' + exitSide + ' — ' + fmDist(nextGDist) + exitRef;
+        spokenAdv = 'Take the ' + exitSide + ' exit in ' + fmDist(nextGDist) + exitRef + '.';
+      } else {
+        adv = '🚨 EXIT NOW — ' + exitSide + exitRef;
+        spokenAdv = 'Exit now. ' + exitSide + exitRef + '.';
+      }
+      instrEl.textContent = adv;
+      // Always speak motorway exits regardless of voice mode
+      if (_voiceMode !== 'off' && nextGDist < 1600) speak(spokenAdv);
+      return;
+    } else if (mn.includes('ROUNDABOUT')) {
+      var en = nextG.roundaboutExit;
+      adv = 'Roundabout ahead' + (en ? ' - exit ' + en : '');
+      if (nextGDist < 500) speakTurn(adv);
+    } else if (mn.includes('TURN_RIGHT') && nextGDist > 400 && nextGDist < 700) {
+      adv = 'Move right - turn ahead in ' + fmDist(nextGDist);
+    } else if (mn.includes('TURN_LEFT') && nextGDist > 400 && nextGDist < 700) {
+      adv = 'Move left - turn ahead in ' + fmDist(nextGDist);
+    }
+    if (adv) { instrEl.textContent = adv; return; }
   }
 
   // Scan ahead up to 600m for the next significant turn
