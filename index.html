@@ -401,9 +401,11 @@ select option { background: var(--s2); }
 
 .drive-hud {
   position: relative;
-  flex-shrink: 0; background: var(--s1);
-  border-top: 2px solid var(--amber);
-  padding: 12px 14px 20px;
+  background: rgba(10,10,10,0.92);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .drive-instruction {
   font-size: 1.15rem; font-weight: 800;
@@ -4061,10 +4063,13 @@ function onDrivePosition(pos) {
   var offThresh = Math.max(80, Math.min(160, gpsAcc * 4));
   var distFromRoute = closest.dist;
   if (distFromRoute > offThresh) {
-    driveState.offRoute = true;
-    document.getElementById('driveRecalc').classList.add('show');
-    document.getElementById('driveInstruction').textContent = '⚠️ Off route — rerouting…';
-    speak('You are off route. Recalculating now.', true);
+    // Only trigger off-route once — not every GPS tick
+    if (!driveState.offRoute) {
+      driveState.offRoute = true;
+      document.getElementById('driveRecalc').classList.add('show');
+      document.getElementById('driveInstruction').textContent = '⚠️ Off route — rerouting…';
+      speak('You are off route. Recalculating now.', true);
+    }
     document.getElementById('dStatSpeed').textContent = Math.round(speedMph);
     var _limOff = getSpeedLimit(speedMph);
     document.getElementById('dStatSpeed').className = 'drive-stat-val' + (_limOff.over ? ' speed-warn' : '');
@@ -4262,17 +4267,32 @@ function updateInstruction(lat, lng, idx) {
     var absDir = Math.abs(dir);
 
     // Check if TomTom guidance says this is a roundabout
+    // Search wider window and also check upcoming guidance points
     var isRoundabout = false;
     var roundaboutExitNum = 0;
     for (var rgi = 0; rgi < guidance.length; rgi++) {
       var rg = guidance[rgi];
-      if (rg.pointIdx >= bestTurn.ptIdx - 3 && rg.pointIdx <= bestTurn.ptIdx + 3) {
-        if (rg.maneuver && rg.maneuver.includes('ROUNDABOUT')) {
+      if (rg.maneuver && rg.maneuver.includes('ROUNDABOUT')) {
+        // Check if this guidance point is near our detected turn
+        if (Math.abs(rg.pointIdx - bestTurn.ptIdx) < 10) {
           isRoundabout = true;
           roundaboutExitNum = rg.roundaboutExit || 0;
           break;
         }
       }
+    }
+    // Also detect visually — if bearing changes smoothly in multiple steps it's likely a roundabout
+    if (!isRoundabout && bestTurn.ptIdx > 0) {
+      var checkPts = Math.min(6, pts.length - bestTurn.ptIdx - 1);
+      var smoothTurns = 0;
+      for (var ci = 0; ci < checkPts; ci++) {
+        var cp = bestTurn.ptIdx + ci;
+        var cb1 = getBearing(pts[cp], pts[Math.min(cp+1, pts.length-1)]);
+        var cb2 = getBearing(pts[Math.max(cp-1,0)], pts[cp]);
+        var cd = Math.abs(((cb1 - cb2 + 540) % 360) - 180);
+        if (cd > 10 && cd < 60) smoothTurns++;
+      }
+      if (smoothTurns >= 3) isRoundabout = true;
     }
 
     var word, wordSpoken;
@@ -5021,32 +5041,26 @@ function stopNavigation() {
     <button onclick="toggleHUD()" id="btnHUD" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:20;background:rgba(0,0,0,0.55);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:10px 8px;font-size:0.65rem;font-weight:800;cursor:pointer;writing-mode:vertical-rl;letter-spacing:1px" title="HUD mode">HUD</button>
   </div>
   <div class="drive-hud">
+    <!-- Row 1: Instruction -->
     <div class="drive-instruction" id="driveInstruction">Calculating position…</div>
-    <div class="drive-stats">
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatSpeed">--</div>
-        <div class="drive-stat-lbl" id="dStatSpeedLbl">MPH</div>
-        <div id="dStatLimit">-- limit</div>
+    <!-- Row 2: Speed (big, left) + key stats (right) -->
+    <div style="display:flex;align-items:center;gap:10px">
+      <!-- Speed block -->
+      <div style="text-align:center;min-width:80px">
+        <div id="dStatSpeed" class="drive-stat-val" style="font-size:3rem;line-height:1;font-weight:900">--</div>
+        <div id="dStatSpeedLbl" class="drive-stat-lbl">MPH</div>
+        <div id="dStatLimit" style="font-size:0.6rem;color:var(--muted);margin-top:1px">-- limit</div>
       </div>
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatDist">--</div>
-        <div class="drive-stat-lbl">Left</div>
-      </div>
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatEta">--</div>
-        <div class="drive-stat-lbl">ETA</div>
-      </div>
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatTime" style="font-size:1rem">--</div>
-        <div class="drive-stat-lbl">Time</div>
-      </div>
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatCompass" style="font-size:1.2rem">--</div>
-        <div class="drive-stat-lbl">Facing</div>
-      </div>
-      <div class="drive-stat">
-        <div class="drive-stat-val" id="dStatTemp" style="font-size:1.1rem">--</div>
-        <div class="drive-stat-lbl">Temp</div>
+      <!-- Divider -->
+      <div style="width:1px;background:var(--border);align-self:stretch;opacity:0.5"></div>
+      <!-- Right stats grid -->
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 8px;text-align:center">
+        <div><div class="drive-stat-val" id="dStatDist" style="font-size:1rem">--</div><div class="drive-stat-lbl">LEFT</div></div>
+        <div><div class="drive-stat-val" id="dStatEta" style="font-size:1rem">--</div><div class="drive-stat-lbl">ETA</div></div>
+        <div><div class="drive-stat-val" id="dStatTime" style="font-size:1rem">--</div><div class="drive-stat-lbl">TIME</div></div>
+        <div><div class="drive-stat-val" id="dStatCompass" style="font-size:1.1rem">--</div><div class="drive-stat-lbl">DIR</div></div>
+        <div><div class="drive-stat-val" id="dStatTemp" style="font-size:1rem">--</div><div class="drive-stat-lbl">TEMP</div></div>
+        <div style="display:flex;align-items:center;justify-content:center"><div id="dStatGpsAcc" style="font-size:0.6rem;color:var(--muted)">GPS</div></div>
       </div>
     </div>
     <button class="drive-recalc" id="driveRecalc" onclick="recalcRoute()">⟳ Recalculate Route</button>
