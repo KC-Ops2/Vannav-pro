@@ -1737,8 +1737,17 @@ async function planRoute() {
   var coordStr = fLat + ',' + fLng;
   validWPs.forEach(function(wp){ coordStr += ':' + wp.coords[0] + ',' + wp.coords[1]; });
   coordStr += ':' + tLat + ',' + tLng;
+  var timeModeEl = document.getElementById('timeMode');
+  var planTimeEl = document.getElementById('planTime');
+  var timeParam  = '';
+  if (timeModeEl && planTimeEl && timeModeEl.value !== 'now' && planTimeEl.value) {
+    var iso = new Date(planTimeEl.value).toISOString();
+    timeParam = timeModeEl.value === 'depart'
+      ? '&departAt=' + encodeURIComponent(iso)
+      : '&arriveAt=' + encodeURIComponent(iso);
+  }
   var base = 'https://api.tomtom.com/routing/1/calculateRoute/' + coordStr +
-    '/json?key=' + state.ttKey + '&travelMode=truck&traffic=true' + avoidParams + vParams;
+    '/json?key=' + state.ttKey + '&travelMode=truck&traffic=true' + avoidParams + vParams + timeParam;
 
   // Request 3 routes: fastest, shortest, and eco
   try {
@@ -2125,6 +2134,12 @@ function tabRoute() {
   var actionHTML = '';
   if (!state.routeOptions) {
     actionHTML =
+      '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">' +
+      '<select id="timeMode" onchange="var p=document.getElementById(\'planTime\');p.style.display=this.value===\'now\'?\'none\':\'block\';if(this.value!==\'now\'&&!p.value){var d=new Date();d.setDate(d.getDate()+1);d.setHours(8,0,0,0);p.value=d.toISOString().slice(0,16);}" style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--fg);font-size:0.8rem">' +
+      '<option value="now">Leave now</option><option value="depart">Depart at...</option><option value="arrive">Arrive by...</option>' +
+      '</select>' +
+      '<input type="datetime-local" id="planTime" style="flex:1;background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--fg);font-size:0.8rem;display:none">' +
+      '</div>' +
       '<button class="btn" data-action="planRoute" ' + (noKey?'disabled':'') + '>' +
         (noKey ? '🔑 Add API Key in Settings First' : '🗺 ' + t('plan')) +
       '</button>' +
